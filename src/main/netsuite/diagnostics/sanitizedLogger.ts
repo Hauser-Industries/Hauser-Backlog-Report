@@ -1,7 +1,7 @@
 import log from 'electron-log/main'
 
-const SENSITIVE_KEY = /authorization|token|secret|code_verifier|codeverifier|refresh|password/i
-const SENSITIVE_TEXT = /(bearer\s+)[^\s,;]+|((?:access|refresh)_token["'\s:=]+)[^\s,"'}]+/gi
+const SENSITIVE_KEY =
+  /authorization|token|secret|code_verifier|codeverifier|refresh|password|^(?:code|state)$/i
 
 export type DiagnosticValue = string | number | boolean | null
 export type DiagnosticDetails = Readonly<Record<string, DiagnosticValue>>
@@ -13,8 +13,31 @@ export interface DiagnosticLogger {
   error(message: string, details?: DiagnosticDetails): void
 }
 
-function redactText(value: string): string {
-  return value.replace(SENSITIVE_TEXT, '$1$2[REDACTED]')
+export function redactSensitiveText(value: string): string {
+  return value
+    .replace(/authorization\s*:\s*bearer\s+[^\s,;]+/gi, '[REDACTED]')
+    .replace(/(bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/((?:access|refresh)_token["'\s:=]+)[^\s,"'}]+/gi, '$1[REDACTED]')
+    .replace(/([?&](?:code|state|code_verifier)=)[^&#\s]+/gi, '$1[REDACTED]')
+    .replace(/(\bcode_verifier\s*=\s*)[^&\s]+/gi, '$1[REDACTED]')
+}
+
+export function sanitizeDiagnosticText(
+  value: string,
+  maximumLength: number,
+  sensitiveValues: readonly string[] = []
+): string {
+  const scrubbed = sensitiveValues.reduce(
+    (current, sensitiveValue) =>
+      sensitiveValue ? current.replaceAll(sensitiveValue, '[REDACTED]') : current,
+    value
+  )
+  const withoutControlCharacters = Array.from(redactSensitiveText(scrubbed), (character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 31 || codePoint === 127 ? ' ' : character
+  }).join('')
+
+  return withoutControlCharacters.replace(/\s+/g, ' ').trim().slice(0, maximumLength)
 }
 
 function sanitizeDetails(details?: DiagnosticDetails): Record<string, DiagnosticValue> {
@@ -23,13 +46,17 @@ function sanitizeDetails(details?: DiagnosticDetails): Record<string, Diagnostic
   return Object.fromEntries(
     Object.entries(details).map(([key, value]) => [
       key,
-      SENSITIVE_KEY.test(key) ? '[REDACTED]' : typeof value === 'string' ? redactText(value) : value
+      SENSITIVE_KEY.test(key)
+        ? '[REDACTED]'
+        : typeof value === 'string'
+          ? redactSensitiveText(value)
+          : value
     ])
   )
 }
 
 function safeMessage(message: string): string {
-  return redactText(message)
+  return redactSensitiveText(message)
 }
 
 export const netSuiteDiagnosticLogger: DiagnosticLogger = {

@@ -13,7 +13,8 @@ export function calculateQuantityRemaining(ordered: number, shipped: number): nu
   return normalizeQuantity(normalizeQuantity(ordered) - normalizeQuantity(shipped))
 }
 
-export function formatQuantity(value: number): string {
+export function formatQuantity(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return ''
   return new Intl.NumberFormat('en-CA', {
     maximumFractionDigits: QUANTITY_PRECISION
   }).format(normalizeQuantity(value))

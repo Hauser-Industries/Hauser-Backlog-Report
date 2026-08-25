@@ -18,7 +18,7 @@ const TOKEN_EXPIRY_SKEW_MS = 60_000
 
 const tokenResponseSchema = z.object({
   access_token: z.string().min(1),
-  refresh_token: z.string().min(1).optional(),
+  refresh_token: z.string().min(1),
   expires_in: z.union([z.number().positive(), z.string().regex(/^\d+$/)]),
   token_type: z.string().optional()
 })
@@ -27,6 +27,7 @@ interface PendingAuthorization {
   state: string
   codeVerifier: string
   createdAt: number
+  revision: number
 }
 
 interface MemoryAccessToken {
@@ -69,6 +70,7 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
   private pendingAuthorization: PendingAuthorization | undefined
   private accessToken: MemoryAccessToken | undefined
   private refreshPromise: Promise<string> | undefined
+  private authRevision = 0
 
   constructor(options: OAuthPkceProviderOptions) {
     validateOAuthEndpoints(options.endpoints)
@@ -90,9 +92,10 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
     }
 
     if (!this.refreshPromise) {
-      this.refreshPromise = this.refreshAccessToken().finally(() => {
-        this.refreshPromise = undefined
+      const trackedRefresh = this.refreshAccessToken().finally(() => {
+        if (this.refreshPromise === trackedRefresh) this.refreshPromise = undefined
       })
+      this.refreshPromise = trackedRefresh
     }
     return this.refreshPromise
   }
@@ -101,16 +104,20 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
     if (this.accessToken && this.accessToken.expiresAt - TOKEN_EXPIRY_SKEW_MS > this.now()) {
       return true
     }
-    return Boolean(await this.tokenStore.getRefreshToken())
+    return this.tokenStore.hasRefreshToken()
   }
 
   async signIn(): Promise<void> {
     const pkce = createPkceValues()
-    this.pendingAuthorization = {
+    const pendingAuthorization: PendingAuthorization = {
       state: pkce.state,
       codeVerifier: pkce.codeVerifier,
-      createdAt: this.now()
+      createdAt: this.now(),
+      revision: ++this.authRevision
     }
+    this.pendingAuthorization = pendingAuthorization
+    this.accessToken = undefined
+    this.refreshPromise = undefined
 
     const authorizationUrl = new URL(this.endpoints.authorizationEndpoint)
     authorizationUrl.searchParams.set('response_type', 'code')
@@ -127,7 +134,9 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
         endpointCategory: 'oauth'
       })
     } catch (error) {
-      this.pendingAuthorization = undefined
+      if (this.pendingAuthorization === pendingAuthorization) {
+        this.pendingAuthorization = undefined
+      }
       throw new NetSuiteIntegrationError('Unable to open the NetSuite sign-in page.', {
         code: 'authentication-failed',
         cause: error
@@ -136,8 +145,10 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
   }
 
   async signOut(): Promise<void> {
+    this.authRevision += 1
     this.pendingAuthorization = undefined
     this.accessToken = undefined
+    this.refreshPromise = undefined
     await this.tokenStore.clearRefreshToken()
     this.logger.info('Cleared locally stored NetSuite authentication.', {
       endpointCategory: 'oauth'
@@ -146,6 +157,14 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
 
   invalidateAccessToken(): void {
     this.accessToken = undefined
+  }
+
+  /** Clears account-bound volatile OAuth state without deleting the encrypted refresh token. */
+  clearVolatileState(): void {
+    this.authRevision += 1
+    this.pendingAuthorization = undefined
+    this.accessToken = undefined
+    this.refreshPromise = undefined
   }
 
   async handleOAuthCallback(callbackUri: string): Promise<void> {
@@ -191,11 +210,19 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
         )
       }
 
-      await this.exchangeAuthorizationCode(authorizationCode, pending.codeVerifier)
+      // Consume the pending attempt before any network call. A duplicate deep
+      // link can therefore never exchange the same authorization code twice.
+      if (this.pendingAuthorization === pending) this.pendingAuthorization = undefined
+
+      await this.exchangeAuthorizationCode(
+        authorizationCode,
+        pending.codeVerifier,
+        pending.revision
+      )
       this.logger.info('NetSuite OAuth authorization completed.', { endpointCategory: 'oauth' })
     } finally {
       // Authorization codes, verifier values, and state are one-time values.
-      this.pendingAuthorization = undefined
+      if (this.pendingAuthorization === pending) this.pendingAuthorization = undefined
     }
   }
 
@@ -225,7 +252,11 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
     return callback
   }
 
-  private async exchangeAuthorizationCode(code: string, codeVerifier: string): Promise<void> {
+  private async exchangeAuthorizationCode(
+    code: string,
+    codeVerifier: string,
+    revision: number
+  ): Promise<void> {
     const token = await this.requestToken(
       new URLSearchParams({
         grant_type: 'authorization_code',
@@ -236,13 +267,17 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
       })
     )
 
-    if (token.refreshToken) await this.tokenStore.setRefreshToken(token.refreshToken)
-    this.accessToken = { value: token.accessToken, expiresAt: token.expiresAt }
+    await this.commitTokenResponse(token, revision)
   }
 
   private async refreshAccessToken(): Promise<string> {
-    const refreshToken = await this.tokenStore.getRefreshToken()
+    const revision = this.authRevision
+    // takeRefreshToken removes the encrypted token before the request. If the
+    // response is lost, a one-time token is never replayed; the user signs in.
+    const refreshToken = await this.tokenStore.takeRefreshToken()
     if (!refreshToken) throw new NetSuiteAuthenticationRequiredError()
+
+    if (revision !== this.authRevision) throw new NetSuiteAuthenticationRequiredError()
 
     const token = await this.requestToken(
       new URLSearchParams({
@@ -252,15 +287,45 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
       })
     )
 
-    // NetSuite may rotate refresh tokens. Always retain the newest token.
-    if (token.refreshToken) await this.tokenStore.setRefreshToken(token.refreshToken)
-    this.accessToken = { value: token.accessToken, expiresAt: token.expiresAt }
+    await this.commitTokenResponse(token, revision)
     return token.accessToken
+  }
+
+  private async commitTokenResponse(
+    token: { accessToken: string; refreshToken: string; expiresAt: number },
+    revision: number
+  ): Promise<void> {
+    if (revision !== this.authRevision) throw new NetSuiteAuthenticationRequiredError()
+
+    try {
+      // The new encrypted token replaces the old token before its companion
+      // access token is exposed to the rest of the application.
+      await this.tokenStore.setRefreshToken(token.refreshToken)
+    } catch (error) {
+      await this.clearRefreshTokenBestEffort()
+      throw error
+    }
+
+    if (revision !== this.authRevision) {
+      await this.clearRefreshTokenBestEffort()
+      throw new NetSuiteAuthenticationRequiredError()
+    }
+
+    this.accessToken = { value: token.accessToken, expiresAt: token.expiresAt }
+  }
+
+  private async clearRefreshTokenBestEffort(): Promise<void> {
+    try {
+      await this.tokenStore.clearRefreshToken()
+    } catch {
+      // Preserve the original authentication failure. The store writes only
+      // encrypted bytes and will retry cleanup during the next operation.
+    }
   }
 
   private async requestToken(body: URLSearchParams): Promise<{
     accessToken: string
-    refreshToken?: string
+    refreshToken: string
     expiresAt: number
   }> {
     const controller = new AbortController()
@@ -292,7 +357,7 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
       const expiresInSeconds = Number(parsed.data.expires_in)
       return {
         accessToken: parsed.data.access_token,
-        ...(parsed.data.refresh_token ? { refreshToken: parsed.data.refresh_token } : {}),
+        refreshToken: parsed.data.refresh_token,
         expiresAt: this.now() + expiresInSeconds * 1000
       }
     } catch (error) {

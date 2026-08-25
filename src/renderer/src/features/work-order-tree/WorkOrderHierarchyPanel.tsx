@@ -1,43 +1,29 @@
 import type { CSSProperties } from 'react'
 import type { WorkOrderNode } from '@shared/types/backlog'
-import { formatDate } from '@shared/utils/date'
-import { formatQuantity } from '@shared/utils/quantity'
 import { StatusBadge } from '../../components/StatusBadge'
 
 interface WorkOrderHierarchyPanelProps {
   root: WorkOrderNode
+  source?: 'live-rest' | 'demo'
 }
 
-interface WorkOrderTreeRowsProps {
-  nodes: WorkOrderNode[]
-  depth?: number
-}
-
-function optionalQuantity(value?: number): string {
-  return value === undefined ? '—' : formatQuantity(value)
-}
-
-function WorkOrderTreeRows({ nodes, depth = 0 }: WorkOrderTreeRowsProps) {
+function WorkOrderTreeRows({ nodes, depth = 0 }: { nodes: WorkOrderNode[]; depth?: number }) {
   return nodes.map((node) => {
     const indentation = { '--tree-depth': depth } as CSSProperties
-
+    const hasWorkOrder = Boolean(node.workOrderNumber.trim())
     return (
       <div className="work-order-tree__branch" key={node.internalId} role="treeitem">
         <div className="work-order-tree__row" style={indentation}>
-          <div className="work-order-tree__identity">
+          <span className="work-order-tree__item">
             <span className="work-order-tree__connector" aria-hidden="true" />
-            <div>
-              <strong>{node.workOrderNumber}</strong>
-              <span>{node.item || '—'}</span>
-            </div>
-          </div>
-          <span className="work-order-tree__description">{node.itemDescription || '—'}</span>
-          <span className="numeric">{optionalQuantity(node.quantity)}</span>
-          <span className="numeric">{optionalQuantity(node.quantityCompleted)}</span>
-          <span className="numeric">{optionalQuantity(node.quantityRemaining)}</span>
-          <span>{formatDate(node.createdDate)}</span>
-          <span>{formatDate(node.dueDate)}</span>
-          <StatusBadge label={node.statusLabel || 'Unknown'} compact />
+            {node.item || '—'}
+          </span>
+          <strong>{hasWorkOrder ? node.workOrderNumber : '—'}</strong>
+          {hasWorkOrder ? (
+            <StatusBadge label={node.statusLabel || 'Unknown'} compact />
+          ) : (
+            <span className="no-work-order">No Work Order</span>
+          )}
         </div>
         {node.children.length > 0 ? (
           <div role="group">
@@ -49,7 +35,7 @@ function WorkOrderTreeRows({ nodes, depth = 0 }: WorkOrderTreeRowsProps) {
   })
 }
 
-export function WorkOrderHierarchyPanel({ root }: WorkOrderHierarchyPanelProps) {
+export function WorkOrderHierarchyPanel({ root, source }: WorkOrderHierarchyPanelProps) {
   return (
     <section
       className="hierarchy-panel"
@@ -57,35 +43,29 @@ export function WorkOrderHierarchyPanel({ root }: WorkOrderHierarchyPanelProps) 
     >
       <div className="hierarchy-panel__summary">
         <div>
-          <p className="eyebrow">Top-level work order</p>
+          <p className="eyebrow">Top-level Work Order</p>
           <h3>
-            {root.item || 'Item not available'} <span>·</span> {root.workOrderNumber}
+            {root.item || 'Assembly item unavailable'} <span>·</span> {root.workOrderNumber}
           </h3>
         </div>
-        <StatusBadge label={root.statusLabel || 'Unknown'} />
+        <div className="hierarchy-panel__status">
+          {source === 'demo' ? <span className="demo-hierarchy-badge">Demo hierarchy</span> : null}
+          <StatusBadge label={root.statusLabel || 'Unknown'} />
+        </div>
       </div>
 
       <div className="hierarchy-panel__heading">
-        <h4>Related Work Orders</h4>
-        <span>
-          {root.children.length === 1
-            ? '1 direct child'
-            : `${root.children.length} direct children`}
-        </span>
+        <h4>Subitem Work Orders</h4>
+        <span>{root.children.length} direct subitems</span>
       </div>
 
       {root.children.length === 0 ? (
-        <div className="hierarchy-panel__empty">No related sub-work orders were found.</div>
+        <div className="hierarchy-panel__empty">No linked subitem Work Orders were found.</div>
       ) : (
-        <div className="work-order-tree" role="tree" aria-label="Related Work Orders">
+        <div className="work-order-tree" role="tree" aria-label="Subitem Work Orders">
           <div className="work-order-tree__header" aria-hidden="true">
-            <span>Work Order / Item</span>
-            <span>Description</span>
-            <span className="numeric">Qty</span>
-            <span className="numeric">Qty Complete</span>
-            <span className="numeric">Qty Remaining</span>
-            <span>Created Date</span>
-            <span>Due Date</span>
+            <span>Sub Item</span>
+            <span>Work Order</span>
             <span>Status</span>
           </div>
           <WorkOrderTreeRows nodes={root.children} />

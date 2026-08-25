@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import type { BacklogRow, WorkOrderStatus } from '@shared/types/backlog'
-import { calculateQuantityRemaining, normalizeQuantity } from '@shared/utils/quantity'
+import type { BacklogRow } from '@shared/types/backlog'
+import { normalizeQuantity } from '@shared/utils/quantity'
 
 const externalScalarSchema = z.union([z.string(), z.number(), z.null()]).optional()
 const requiredExternalScalarSchema = z
@@ -22,15 +22,22 @@ export const rawBacklogRecordSchema = z
     workOrderNumber: externalScalarSchema,
     salesOrderInternalId: externalScalarSchema,
     salesOrderNumber: requiredExternalScalarSchema,
-    shipTo: externalScalarSchema,
     itemInternalId: externalScalarSchema,
     item: requiredExternalScalarSchema,
     itemDescription: externalScalarSchema,
+    paintItemInternalId: externalScalarSchema,
+    paintSku: externalScalarSchema,
     paintName: externalScalarSchema,
+    fabricItemInternalId: externalScalarSchema,
+    fabricSku: externalScalarSchema,
     fabricName: externalScalarSchema,
+    weltItemInternalId: externalScalarSchema,
+    weltSku: externalScalarSchema,
+    weltName: externalScalarSchema,
+    buttonItemInternalId: externalScalarSchema,
+    buttonSku: externalScalarSchema,
+    buttonName: externalScalarSchema,
     quantity: externalScalarSchema,
-    quantityShipped: externalScalarSchema,
-    quantityRemaining: externalScalarSchema,
     createdDate: externalScalarSchema,
     dueDate: externalScalarSchema,
     workOrderStatusCode: externalScalarSchema,
@@ -71,24 +78,6 @@ function optionalText(value: string | number | null | undefined): string | undef
   return text.length > 0 ? text : undefined
 }
 
-function hasValue(value: string | number | null | undefined): boolean {
-  return optionalText(value) !== undefined
-}
-
-function transformStatus(
-  codeValue: string | number | null | undefined,
-  labelValue: string | number | null | undefined
-): WorkOrderStatus | undefined {
-  const label = optionalText(labelValue)
-  if (!label) return undefined
-
-  const code = optionalText(codeValue)
-  return {
-    ...(code ? { code } : {}),
-    label
-  }
-}
-
 export function transformBacklogRecord(raw: unknown, recordIndex?: number): BacklogRow {
   const parsed = rawBacklogRecordSchema.safeParse(raw)
   if (!parsed.success) {
@@ -102,39 +91,52 @@ export function transformBacklogRecord(raw: unknown, recordIndex?: number): Back
   const workOrderNumber = optionalText(value.workOrderNumber)
   const salesOrderInternalId = optionalText(value.salesOrderInternalId)
   const itemInternalId = optionalText(value.itemInternalId)
+  const paintItemInternalId = optionalText(value.paintItemInternalId)
+  const paintSku = optionalText(value.paintSku)
+  const fabricItemInternalId = optionalText(value.fabricItemInternalId)
+  const fabricSku = optionalText(value.fabricSku)
+  const weltItemInternalId = optionalText(value.weltItemInternalId)
+  const weltSku = optionalText(value.weltSku)
+  const buttonItemInternalId = optionalText(value.buttonItemInternalId)
+  const buttonSku = optionalText(value.buttonSku)
   const createdDate = optionalText(value.createdDate)
   const dueDate = optionalText(value.dueDate)
-  const workOrderStatus = transformStatus(value.workOrderStatusCode, value.workOrderStatusLabel)
+  const workOrderStatusCode = optionalText(value.workOrderStatusCode)
+  const workOrderStatusLabel = optionalText(value.workOrderStatusLabel)
 
   const quantity = normalizeQuantity(value.quantity)
-  const quantityShipped = normalizeQuantity(value.quantityShipped)
-  // The verified live mapping should provide quantityRemaining. The fallback is
-  // useful for mock/malformed payloads and is intentionally centralized here.
-  const quantityRemaining = hasValue(value.quantityRemaining)
-    ? normalizeQuantity(value.quantityRemaining)
-    : calculateQuantityRemaining(quantity, quantityShipped)
+  const customerName = toText(value.customerName)
 
   return {
     rowKey: toText(value.rowKey),
     ...(customerInternalId ? { customerInternalId } : {}),
-    customerName: toText(value.customerName),
+    customerName,
     poNumber: toText(value.poNumber),
     ...(workOrderInternalId ? { workOrderInternalId } : {}),
     ...(workOrderNumber ? { workOrderNumber } : {}),
     ...(salesOrderInternalId ? { salesOrderInternalId } : {}),
     salesOrderNumber: toText(value.salesOrderNumber).toUpperCase(),
-    shipTo: toText(value.shipTo),
+    shipTo: customerName,
     ...(itemInternalId ? { itemInternalId } : {}),
     item: toText(value.item),
     itemDescription: toText(value.itemDescription),
+    ...(paintItemInternalId ? { paintItemInternalId } : {}),
+    ...(paintSku ? { paintSku } : {}),
     paintName: toText(value.paintName),
+    ...(fabricItemInternalId ? { fabricItemInternalId } : {}),
+    ...(fabricSku ? { fabricSku } : {}),
     fabricName: toText(value.fabricName),
+    ...(weltItemInternalId ? { weltItemInternalId } : {}),
+    ...(weltSku ? { weltSku } : {}),
+    weltName: toText(value.weltName),
+    ...(buttonItemInternalId ? { buttonItemInternalId } : {}),
+    ...(buttonSku ? { buttonSku } : {}),
+    buttonName: toText(value.buttonName),
     quantity,
-    quantityShipped,
-    quantityRemaining,
     ...(createdDate ? { createdDate } : {}),
     ...(dueDate ? { dueDate } : {}),
-    ...(workOrderStatus ? { workOrderStatus } : {})
+    ...(workOrderStatusCode ? { workOrderStatusCode } : {}),
+    ...(workOrderStatusLabel ? { workOrderStatusLabel } : {})
   }
 }
 

@@ -1,134 +1,85 @@
 # Architecture
 
-## Purpose
+## Purpose and active report contract
 
-Hauser Backlog Report is a private Windows desktop reporting application. It shows the Sales Order backlog for six configured Hauser Company Stores customers and keeps each Sales Order item as the primary row. A row's top-level Work Order can be expanded to inspect the status of related subassembly Work Orders recursively.
+Hauser Backlog Report is a private, read-only Windows desktop application for six configured Hauser Company Stores customers. Its report keeps one Sales Order item line as the primary grain and presents exactly these 15 columns:
 
-The application is intentionally read-only. It has no hosted companion service, database, telemetry pipeline, editing workflow, or automatic updater.
+1. Customer Name
+2. PO #
+3. Work Order #
+4. Sales Order #
+5. Ship To
+6. Item
+7. Item Description
+8. Paint Name
+9. Fabric Name
+10. Welt Name
+11. Button Name
+12. Sum of Qty.
+13. Created Date
+14. Due Date
+15. WO Status
 
-## Recorded assumptions
-
-1. This is a Windows desktop application.
-2. There is no hosted backend.
-3. The application retrieves report data from NetSuite.
-4. The application is read-only.
-5. NetSuite API calls occur only in the Electron main process.
-6. OAuth 2.0 PKCE Public Client is the default authentication design.
-7. Report data is not persistently cached to disk by default.
-8. Work Order hierarchy must use verified NetSuite relationships.
-9. Paint/Fabric and several report field IDs still require mapping.
-10. Mock data is used until NetSuite setup is completed.
+Ship To intentionally repeats Customer Name. Report quantity is the sign-inverted Sales Order line quantity. Shipped/remaining quantities and child Work Order hierarchy are not part of the active report model, query path, or UI.
 
 ## Process boundary
 
 ```text
 React renderer
     |
-    | narrow, typed, validated IPC
+    | narrow typed IPC (sanitized results only)
     v
 Preload bridge
     |
     v
 Electron main process
-    |-- data-source selection
-    |-- NetSuite authentication and token storage
-    |-- SuiteQL/REST client and repositories
-    |-- response validation and transformation
-    |-- Work Order hierarchy resolution
-    `-- sanitized diagnostic logging
+    |-- environment-aware OAuth and encrypted token storage
+    |-- authenticated REST/SuiteQL client
+    |-- diagnostic and eventual backlog queries
+    |-- response validation and report transformation
+    `-- sanitized logging
 ```
 
-The renderer has `nodeIntegration` disabled and runs with context isolation. It receives only the operations needed by the report and connection interface. It cannot execute arbitrary SQL, fetch arbitrary URLs, invoke shell commands, read arbitrary files, or access credentials. NetSuite endpoints, tokens, account configuration, and raw payloads stay in the main process.
+The renderer cannot execute arbitrary SQL, request arbitrary URLs, access Node.js, or receive OAuth credentials. The main process owns NetSuite configuration, tokens, queries, response validation, and read-only HTTP access.
 
-Remote JavaScript is not loaded. Production builds do not automatically open developer tools, and a restrictive Content Security Policy should be maintained for the renderer.
+## Current field-mapping flow
 
-## Data-source boundary
-
-The UI consumes a backlog data-source contract rather than importing a NetSuite client. Two implementations share that contract:
-
-- `MockBacklogDataSource` supplies deterministic development and test records.
-- `NetSuiteBacklogDataSource` coordinates authenticated, validated live reads.
-
-Mock mode must exercise the same report components and models as live mode. Switching modes must not introduce a second throwaway user interface. Sensitive settings must not use `VITE_` environment variables because Vite values can be embedded in renderer assets.
-
-## Report loading flow
+The exact Sales Order diagnostic uses the last known-good SO10144 transaction-line query. The four replacement custom fields and `createwo` are excluded because adding them caused a Production HTTP 500. It performs no secondary Item or Work Order query.
 
 ```text
-load configuration
+validated Sales Order number
         |
-select mock or live source
+read Sales Order transaction lines
         |
-retrieve backlog rows at the report's verified grain
+validate the known-good row fields
         |
-collect and deduplicate top-level Work Order internal IDs
-        |
-retrieve Work Order records and relationships separately
-        |
-validate records and build recursive hierarchies
-        |
-merge hierarchies into backlog rows by internal ID
-        |
-return a typed response to the renderer
+return typed sanitized diagnostic result
 ```
 
-The newest request controls the displayed state. Customer changes, Sales Order searches, and refreshes use cancellation or request identity checks so an older response cannot overwrite a newer result. Refresh bypasses stale hierarchy state, prevents duplicate concurrent refreshes, and updates the visible timestamp.
+The eventual production backlog query remains blocked on live diagnostic evidence for replacement-name precedence and the runtime representation of `createwo`. Mock mode exercises the same flat report model and 15-column renderer.
 
-Short-lived in-memory caching is acceptable for Work Order details, resolved hierarchies, and customer IDs. The complete backlog is not persisted to disk by default.
+## Quantities and grain
 
-## Report grain and quantities
+Live REST SuiteQL inspection showed `transactionLine.quantity` as negative numeric strings for the tested Sales Order. The active normalization rule is:
 
-A backlog row must preserve all visible business dimensions, including Sales Order, Work Order, Ship To, item, Paint Name, and Fabric Name. Grouping keys are explicit and testable. Separate lines are not combined merely because they share a customer.
+```text
+report quantity = -transactionLine.quantity
+```
 
-Backlog aggregation and Work Order relationship loading are deliberately separate. Joining a Sales Order line directly to several child Work Orders can multiply the line quantity; the application instead aggregates the line once and attaches a hierarchy afterward by internal ID.
+The raw value and raw scalar type remain visible in the diagnostic. No shipped or remaining quantity calculation participates in the report. Grouping must preserve Sales Order line, Customer, top-level Work Order, Item, and the four replacement dimensions.
 
-Quantity source fields and sign conventions remain pending account verification. Normalization occurs in one transformation layer, supports decimal quantities, and avoids display artifacts. The calculation `ordered - shipped` is not considered authoritative until compared with the existing NetSuite report.
+## Authentication and environment isolation
 
-## Work Order hierarchy
+OAuth uses Authorization Code Grant with PKCE and the registered `hauser-backlog://oauth/callback` protocol. Access tokens stay only in main-process memory. Refresh tokens are encrypted with Electron `safeStorage`, stored as binary ciphertext, and namespaced by NetSuite account/environment. Switching environments clears access-token and pending PKCE state without deleting the other profile's encrypted refresh token.
 
-`WorkOrderNode` is recursive and uses NetSuite internal IDs as relationship keys. Transaction numbers remain display values, not database-style identifiers.
+Sandbox and Production profiles have independent account IDs, SuiteTalk URLs, and public client IDs. The connected environment is explicit in typed state and visibly labelled in the UI. There is no bundled client secret.
 
-Hierarchy construction is expected to:
+NetSuite Public Client refresh tokens are treated as one-time-use credentials: the prior encrypted token is consumed before refresh, and a replacement refresh token must be encrypted and saved before its access token is published.
 
-1. index validated Work Orders by internal ID;
-2. associate nodes only through a verified NetSuite transaction relationship;
-3. build descendants recursively from a requested root;
-4. track the active traversal path to stop circular references;
-5. deduplicate repeated relationships;
-6. handle missing parents and orphaned records without infinite recursion; and
-7. preserve unknown status labels exactly as returned.
+## Validation, errors, and logging
 
-Matching an item or SKU is never sufficient evidence of a parent/child relationship. The account-specific relationship is the most important unresolved live integration item and remains an explicit TODO.
+Zod validates external envelopes and rows. Strict query helpers accept only application-controlled Sales Order numbers or numeric NetSuite internal IDs. HTTP and SuiteQL errors are mapped into typed, sanitized renderer results, including allowlisted NetSuite error code/message diagnostics for field mapping. Tokens, authorization headers, PKCE material, and raw response bodies do not cross IPC or enter logs.
 
-## NetSuite integration
+## Packaging
 
-The intended live strategy uses REST Web Services and SuiteQL. The low-level client is responsible for Bearer authentication, the required `Prefer: transient` header, reusable limit/offset pagination, response validation, timeouts, cancellation, bounded retry behavior, and sanitized diagnostics.
-
-Backlog retrieval follows a narrow repository path. A specific Sales Order search queries that order directly instead of downloading the full backlog. Full backlog queries are limited to the six configured customers, preferably by their internal IDs after those IDs are verified. Batch Work Order loading is preferred; any necessary per-record fallback is concurrency-limited to avoid an N+1 request burst.
-
-HTTP 401, 403, 429, network failures, invalid configuration, and invalid SuiteQL are translated into useful application errors. Retryable 429 and 5xx responses use a bounded delay and honor `Retry-After` when supplied. Authentication failures and invalid queries are not retried indefinitely.
-
-## Authentication and storage
-
-OAuth 2.0 Authorization Code Grant with PKCE is the default design for this distributed desktop client. It uses a cryptographic verifier, an S256 challenge, and a cryptographically random state value. The user's system browser handles sign-in; the application receives the configurable `hauser-backlog://oauth/callback` deep link through Electron protocol and single-instance handling.
-
-Callback processing validates state, expiry, URI shape, and the presence of an authorization code. Temporary verifier/state material is cleared after success or failure. No client secret is bundled because a secret in a desktop executable is recoverable and cannot be treated as confidential.
-
-Access tokens remain in memory where practical. A persisted refresh token is encrypted with Electron `safeStorage` before being passed to the settings store, and token rotation replaces the prior encrypted value. Signing out clears locally held tokens. Tokens, authorization headers, authorization codes, PKCE verifiers, and secrets are excluded from logs.
-
-Authentication is exposed behind an interface so another approved strategy can be added later without coupling it to the HTTP client. Token-based authentication is not implemented unless separately required.
-
-## Validation and diagnostics
-
-External JSON is treated as untrusted. Zod schemas validate API envelopes and mapped records at integration boundaries. Optional values remain optional; missing display values render as blank or an em dash rather than `undefined`, `null`, or `NaN`.
-
-Development diagnostics may record the application version, endpoint category or query identifier, duration, HTTP status, row count, pagination state, retry count, and transformation errors. Logs exclude tokens, headers, secrets, and unnecessary payload or customer data. Raw payload inspection, if introduced for integration work, must remain inaccessible in production.
-
-## Packaging and deployment
-
-electron-vite builds the main process, preload, and renderer into `out/`. electron-builder packages the x64 application as an NSIS installer in `release/`. Installation is per-user by default; code signing may be configured later. The custom OAuth protocol is registered by the packaged application.
-
-GitHub Actions uses a Windows runner and mock-only tests, so CI does not need live NetSuite access or credentials. Installer output is uploaded as a private workflow artifact and is not automatically published as a public release.
-
-## Live integration boundary
-
-Live results are blocked until the values and relationships in `netsuite-integration-todo.md` are confirmed. `netsuite-field-mapping.md` is the source of truth for field readiness. Pending mappings must fail clearly or remain unavailable; they must never be filled with plausible-looking custom field IDs.
+`electron-vite` builds the main, preload, and renderer bundles into `out/`. `electron-builder` creates the Windows x64 NSIS installer under `release/` and registers the OAuth protocol for the packaged executable. A source build does not update an already installed application; the new installer must be generated and run separately.

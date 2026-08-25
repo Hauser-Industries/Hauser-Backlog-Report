@@ -1,5 +1,5 @@
 import type { BacklogDataSource } from './backlogDataSource'
-import type { BacklogRow } from '@shared/types/backlog'
+import type { BacklogPageData, SalesOrderDetailsResult } from '@shared/types/backlog'
 import { assertLiveFieldMappingsReady } from '../netsuite/config/fieldMapping'
 import {
   loadNetSuiteConfig,
@@ -16,14 +16,16 @@ import { NetSuiteConfigurationError } from '../netsuite/errors'
 export class PendingLiveBacklogDataSource implements BacklogDataSource {
   constructor(private readonly configState: NetSuiteConfigState = loadNetSuiteConfig()) {}
 
-  async getBacklog(): Promise<BacklogRow[]> {
-    this.assertReady()
-    return []
+  async getBacklog(): Promise<BacklogPageData> {
+    return this.assertReady()
   }
 
-  async getSalesOrder(): Promise<BacklogRow[]> {
-    this.assertReady()
-    return []
+  async getSalesOrder(): Promise<BacklogPageData> {
+    return this.assertReady()
+  }
+
+  async getSalesOrderDetails(): Promise<SalesOrderDetailsResult> {
+    return this.assertReady()
   }
 
   private assertReady(): never {

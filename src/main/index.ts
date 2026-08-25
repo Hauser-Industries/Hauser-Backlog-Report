@@ -2,18 +2,38 @@ import { join, resolve } from 'node:path'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
 import log from 'electron-log/main'
 import type { BacklogDataSource } from './data/backlogDataSource'
+import { getDataSourceMode } from './config/dataSourceMode'
 import { MockBacklogDataSource } from './data/mock/mockBacklogDataSource'
 import { PendingLiveBacklogDataSource } from './data/pendingLiveBacklogDataSource'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { OAuthPkceProvider } from './netsuite/auth/oauthPkceProvider'
+import { NetSuiteHttpClient } from './netsuite/client/netsuiteHttpClient'
+import { SuiteQlClient } from './netsuite/client/suiteQlClient'
 import { NetSuiteConnectionAdapter } from './netsuite/connection/netSuiteConnectionAdapter'
+import { NetSuiteCustomerIdResolver } from './netsuite/connection/netSuiteCustomerIdResolver'
+import {
+  NetSuiteEnvironmentConnectionManager,
+  type NetSuiteEnvironmentSession
+} from './netsuite/connection/netSuiteEnvironmentConnectionManager'
+import { NetSuiteRestConnectionTester } from './netsuite/connection/netSuiteRestConnectionTester'
+import { NetSuiteSalesOrderInspector } from './netsuite/connection/netSuiteSalesOrderInspector'
+import { NetSuiteSuiteQlTester } from './netsuite/connection/netSuiteSuiteQlTester'
+import { NetSuiteBacklogDataSource } from './netsuite/dataSource/netSuiteBacklogDataSource'
+import { NetSuiteBacklogRepository } from './netsuite/repositories/backlogRepository'
+import { VerifiedBacklogQueryFactory } from './netsuite/queries/backlogQuery'
+import { NetSuiteSalesOrderDetailProvider } from './netsuite/details/salesOrderDetailProvider'
+import { NetSuiteWorkOrderRelationshipResolver } from './netsuite/workOrders/workOrderRelationshipResolver'
+import {
+  NETSUITE_ENVIRONMENT_PROFILES,
+  type NetSuiteEnvironmentProfile
+} from './netsuite/config/environmentProfiles'
 import {
   createNetSuiteOAuthEndpoints,
   loadNetSuiteConfig,
   type NetSuiteConfigState
 } from './netsuite/config/netsuiteConfig'
 import { BacklogService } from './services/backlogService'
-import { ConnectionService, type LiveConnectionAdapter } from './services/connectionService'
+import { ConnectionService } from './services/connectionService'
 import { OAuthDeepLinkRouter } from './services/oauthDeepLinkRouter'
 import { SafeStorageRefreshTokenStore } from './storage/encryptedTokenStore'
 import type { DataSourceMode } from '@shared/types/backlog'
@@ -27,10 +47,6 @@ log.initialize()
 log.transports.file.level = import.meta.env.DEV ? 'debug' : 'info'
 log.transports.console.level = import.meta.env.DEV ? 'debug' : 'warn'
 
-function getDataSourceMode(): DataSourceMode {
-  return process.env.DATA_SOURCE?.trim().toLowerCase() === 'live' ? 'live' : 'mock'
-}
-
 function readLiveConfiguration(): NetSuiteConfigState {
   try {
     return loadNetSuiteConfig()
@@ -40,44 +56,112 @@ function readLiveConfiguration(): NetSuiteConfigState {
     })
     return {
       configured: false,
-      missing: [
-        'NETSUITE_ACCOUNT_ID',
-        'NETSUITE_ACCOUNT_DOMAIN',
-        'NETSUITE_CLIENT_ID',
-        'NETSUITE_REDIRECT_URI'
-      ]
+      missing: ['accountId', 'suiteTalkUrl', 'clientId', 'redirectUri', 'scope']
     }
   }
 }
 
 function createBacklogDataSource(
   mode: DataSourceMode,
-  configState: NetSuiteConfigState
+  configState: NetSuiteConfigState,
+  liveDataSource?: BacklogDataSource
 ): BacklogDataSource {
-  return mode === 'mock'
-    ? new MockBacklogDataSource()
-    : new PendingLiveBacklogDataSource(configState)
+  return (
+    mode === 'mock'
+      ? new MockBacklogDataSource()
+      : (liveDataSource ?? new PendingLiveBacklogDataSource(configState))
+  )
 }
 
 function createLiveConnectionAdapter(
   mode: DataSourceMode,
   configState: NetSuiteConfigState
-): LiveConnectionAdapter | undefined {
+): NetSuiteEnvironmentConnectionManager | undefined {
   if (mode !== 'live' || !configState.configured) return undefined
+
+  const manager = new NetSuiteEnvironmentConnectionManager({
+    profiles: NETSUITE_ENVIRONMENT_PROFILES,
+    initialEnvironment: 'production',
+    createSession: createNetSuiteEnvironmentSession
+  })
+
+  deepLinkRouter.setConsumer(async (callbackUrl) => {
+    try {
+      await manager.handleOAuthCallback(callbackUrl)
+    } finally {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload()
+    }
+  })
+
+  return manager
+}
+
+function createNetSuiteEnvironmentSession(
+  profile: NetSuiteEnvironmentProfile
+): NetSuiteEnvironmentSession {
+  const configState = loadNetSuiteConfig(profile)
+  if (!configState.configured) {
+    throw new Error(`NetSuite ${profile.environment} configuration is incomplete.`)
+  }
 
   const authProvider = new OAuthPkceProvider({
     config: configState.config,
     endpoints: createNetSuiteOAuthEndpoints(configState.config),
-    tokenStore: new SafeStorageRefreshTokenStore()
+    tokenStore: new SafeStorageRefreshTokenStore({
+      tokenNamespace: configState.config.accountId,
+      migrateLegacyGenericToken: profile.environment === 'sandbox'
+    })
   })
-  const adapter = new NetSuiteConnectionAdapter(authProvider)
-
-  deepLinkRouter.setConsumer(async (callbackUrl) => {
-    await adapter.handleOAuthCallback(callbackUrl)
-    mainWindow?.webContents.reload()
+  const restConnectionTester = new NetSuiteRestConnectionTester({
+    config: configState.config,
+    authProvider
   })
+  const httpClient = new NetSuiteHttpClient({
+    config: configState.config,
+    authProvider
+  })
+  const suiteQlClient = new SuiteQlClient(httpClient)
+  const salesOrderDetailProvider = new NetSuiteSalesOrderDetailProvider(httpClient, suiteQlClient)
+  const workOrderRelationshipResolver = new NetSuiteWorkOrderRelationshipResolver(suiteQlClient)
+  const suiteQlConnectionTester = new NetSuiteSuiteQlTester({ suiteQlClient })
+  const customerIdResolver = new NetSuiteCustomerIdResolver({ suiteQlClient })
+  const salesOrderInspector = new NetSuiteSalesOrderInspector({
+    suiteQlClient,
+    environmentProfile: profile
+  })
+  const backlogDataSource = new NetSuiteBacklogDataSource({
+    backlogRepository: new NetSuiteBacklogRepository(
+      suiteQlClient,
+      new VerifiedBacklogQueryFactory(profile),
+      { verified: true, orderedSign: 'invert' },
+      workOrderRelationshipResolver
+    )
+  })
+  const adapter = new NetSuiteConnectionAdapter(
+    authProvider,
+    configState.config,
+    restConnectionTester,
+    suiteQlConnectionTester,
+    customerIdResolver,
+    salesOrderInspector
+  )
 
-  return adapter
+  return {
+    getBacklog: (filter) => backlogDataSource.getBacklog(filter),
+    getSalesOrder: (salesOrderNumber) => backlogDataSource.getSalesOrder(salesOrderNumber),
+    getSalesOrderDetails: (salesOrderInternalId) =>
+      salesOrderDetailProvider.getDetails(salesOrderInternalId),
+    invalidateDetails: () => salesOrderDetailProvider.invalidate(),
+    getStatus: () => adapter.getStatus(),
+    signIn: () => adapter.signIn(),
+    signOut: () => adapter.signOut(),
+    testConnection: () => adapter.testConnection(),
+    testSuiteQl: () => adapter.testSuiteQl(),
+    resolveCustomerIds: () => adapter.resolveCustomerIds(),
+    inspectSalesOrder: (salesOrderNumber) => adapter.inspectSalesOrder(salesOrderNumber),
+    handleOAuthCallback: (callbackUrl) => adapter.handleOAuthCallback(callbackUrl),
+    clearVolatileAuthentication: () => authProvider.clearVolatileState()
+  }
 }
 
 function findDeepLink(argv: string[]): string | undefined {
@@ -166,13 +250,15 @@ if (!hasSingleInstanceLock) {
 
     const mode = getDataSourceMode()
     const configState = readLiveConfiguration()
-    const backlogService = new BacklogService(createBacklogDataSource(mode, configState))
     const liveConnectionAdapter = createLiveConnectionAdapter(mode, configState)
+    const backlogService = new BacklogService(
+      createBacklogDataSource(mode, configState, liveConnectionAdapter)
+    )
     const connectionService = new ConnectionService(mode, liveConnectionAdapter, {
       configured: configState.configured,
-      ...(configState.configured ? { accountLabel: 'Configured' } : {}),
+      ...(configState.configured ? { accountLabel: configState.config.accountId } : {}),
       ...(mode === 'live' && configState.configured
-        ? { message: 'Authentication and verified report field mappings are still required.' }
+        ? { message: 'Production report access uses the authenticated read-only SuiteQL session.' }
         : {})
     })
     registerIpcHandlers({ backlog: backlogService, connection: connectionService })

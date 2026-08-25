@@ -32,7 +32,8 @@
 html,
 body,
 #root {
-  min-width: 980px;
+  width: 100%;
+  min-width: 0;
   min-height: 100%;
   margin: 0;
 }
@@ -78,7 +79,12 @@ p {
 
 .app-shell {
   display: grid;
+  width: 100%;
+  max-width: 100vw;
+  min-width: 0;
   min-height: 100vh;
+  overflow-x: hidden;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
 }
 
@@ -220,12 +226,18 @@ p {
 
 main {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   padding: 20px 24px 24px;
 }
 
 .report-toolbar {
   position: relative;
   display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(320px, 1fr) minmax(485px, 1.45fr) auto;
   gap: 20px;
   align-items: end;
@@ -402,6 +414,9 @@ main {
 }
 
 .report-section {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-top: 16px;
   overflow: hidden;
   background: var(--paper);
@@ -436,15 +451,36 @@ main {
 
 .report-table-shell {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .report-table-scroll {
   width: 100%;
-  max-height: calc(100vh - 325px);
-  min-height: 260px;
-  overflow: auto;
+  max-width: 100%;
+  min-width: 0;
+  max-height: calc(100vh - 380px);
+  min-height: 280px;
+  overflow-x: scroll;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   scrollbar-color: #a9b7b5 #edf0f0;
-  scrollbar-width: thin;
+  scrollbar-width: auto;
+}
+
+.report-table-scroll::-webkit-scrollbar {
+  width: 13px;
+  height: 13px;
+}
+
+.report-table-scroll::-webkit-scrollbar-thumb {
+  background: #a9b7b5;
+  border: 3px solid #edf0f0;
+  border-radius: 8px;
+}
+
+.report-table-scroll::-webkit-scrollbar-track {
+  background: #edf0f0;
 }
 
 .report-table {
@@ -453,6 +489,11 @@ main {
   font-size: 12px;
   border-collapse: separate;
   border-spacing: 0;
+}
+
+.report-table--grouped {
+  width: 2725px;
+  min-width: 2725px;
 }
 
 .report-table thead {
@@ -519,6 +560,68 @@ main {
 
 .report-row:hover td {
   background: #f0f6f4;
+}
+
+.sales-order-row {
+  cursor: pointer;
+}
+
+.sales-order-row td {
+  color: #263c37;
+  font-weight: 620;
+  background: #f7faf9;
+}
+
+.sales-order-expand-button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 4px 5px 4px 0;
+  color: var(--green-900);
+  background: transparent;
+  border: 0;
+}
+
+.sales-order-expand-button svg {
+  flex: 0 0 auto;
+}
+
+.sales-order-item-row td {
+  background: #fff;
+}
+
+.sales-order-item-row .item-cell {
+  position: relative;
+  display: inline-block;
+  padding-left: 21px;
+  color: #214f46;
+  font-weight: 700;
+}
+
+.sales-order-item-row .item-cell::before {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  width: 9px;
+  height: 8px;
+  content: '';
+  border-bottom: 1px solid #9db0ab;
+  border-left: 1px solid #9db0ab;
+  transform: translateY(-65%);
+}
+
+.optional-detail-row td {
+  height: auto;
+  padding: 9px 16px 9px 44px;
+  color: #5c6c69;
+  font-size: 11px;
+  white-space: normal;
+  background: #f4f8f7;
+}
+
+.optional-detail-row--error td {
+  color: #815047;
+  background: #fff8f5;
 }
 
 .report-row--expanded td {
@@ -650,6 +753,32 @@ main {
   font-style: italic;
 }
 
+.row-expand-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 6px 4px 2px;
+  color: #23483f;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.row-expand-button:hover,
+.row-expand-button:focus-visible {
+  color: #112f29;
+  background: #e5efec;
+  outline: none;
+}
+
+.row-expand-button svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
 .hierarchy-detail-row > td {
   height: auto;
   padding: 0;
@@ -681,6 +810,35 @@ main {
   font-weight: 400;
 }
 
+.hierarchy-panel__status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.demo-hierarchy-badge {
+  padding: 5px 8px;
+  color: #765510;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #fff4ce;
+  border: 1px solid #dfc16e;
+  border-radius: 999px;
+}
+
+.work-order-cell {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.work-order-cell .demo-hierarchy-badge {
+  padding: 2px 5px;
+  font-size: 8px;
+}
+
 .hierarchy-panel__heading {
   margin-top: 18px;
   margin-bottom: 7px;
@@ -710,7 +868,7 @@ main {
 }
 
 .work-order-tree {
-  min-width: 1320px;
+  min-width: 620px;
   overflow: hidden;
   background: rgb(255 255 255 / 68%);
   border: 1px solid #d2dddb;
@@ -720,7 +878,7 @@ main {
 .work-order-tree__header,
 .work-order-tree__row {
   display: grid;
-  grid-template-columns: 250px minmax(205px, 1fr) 70px 95px 105px 115px 115px 140px;
+  grid-template-columns: minmax(240px, 1fr) 180px 180px;
   gap: 12px;
   align-items: center;
 }
@@ -753,26 +911,10 @@ main {
   background: rgb(236 243 241 / 55%);
 }
 
-.work-order-tree__identity {
+.work-order-tree__item {
   position: relative;
   min-width: 0;
   padding-left: calc(var(--tree-depth) * 23px);
-}
-
-.work-order-tree__identity > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.work-order-tree__identity strong {
-  color: #254b43;
-  font-size: 11px;
-}
-
-.work-order-tree__identity span:not(.work-order-tree__connector) {
-  margin-top: 2px;
-  color: #677570;
-  font-size: 10px;
 }
 
 .work-order-tree__connector {
@@ -879,6 +1021,9 @@ main {
 
 .table-with-progress {
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .message-state {
@@ -952,6 +1097,7 @@ main {
   right: 0;
   width: 390px;
   height: 100vh;
+  overflow-y: auto;
   padding: 24px;
   background: #fff;
   border-left: 1px solid #cbd5d3;
@@ -1033,9 +1179,480 @@ main {
 
 .connection-panel__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
   margin-top: 18px;
+}
+
+.connection-panel__actions .button {
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+  font-size: 11px;
+}
+
+.connection-panel__actions .connection-panel__action--wide {
+  grid-column: 1 / -1;
+}
+
+.authentication-stage {
+  display: grid;
+  min-height: calc(100vh - 161px);
+  place-items: center;
+  padding: 32px;
+}
+
+.authentication-stage > .loading-state {
+  width: min(100%, 720px);
+  min-height: 360px;
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.authentication-card {
+  width: min(100%, 760px);
+  padding: 34px 38px;
+  background: rgb(255 255 255 / 97%);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--green-700);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgb(24 57 50 / 12%);
+}
+
+.authentication-card > .eyebrow {
+  color: var(--green-700);
+  opacity: 1;
+}
+
+.authentication-card h2 {
+  margin-top: 5px;
+  color: var(--green-900);
+  font-size: 25px;
+}
+
+.authentication-card__status {
+  display: inline-flex;
+  float: right;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  color: #78571e;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fbf5e9;
+  border: 1px solid #eadab8;
+  border-radius: 999px;
+}
+
+.authentication-card__status > span {
+  width: 8px;
+  height: 8px;
+  background: #d8a85b;
+  border-radius: 50%;
+}
+
+.authentication-card__status--connected {
+  color: #225d50;
+  background: #eaf5f1;
+  border-color: #cbe3dc;
+}
+
+.authentication-card__status--connected > span {
+  background: #4aa486;
+}
+
+.authentication-card__status--connection-error {
+  color: #7a3731;
+  background: #fff5f3;
+  border-color: #ebc7c3;
+}
+
+.authentication-card__status--connection-error > span {
+  background: #d86d62;
+}
+
+.authentication-card__message {
+  margin-top: 10px;
+  color: #5d6c68;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.netsuite-environment-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 18px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  align-items: end;
+  background: #f1f6fb;
+  border: 2px solid #9ab7d1;
+  border-radius: 7px;
+}
+
+.netsuite-environment-control--production {
+  color: #752d27;
+  background: #fff3f1;
+  border-color: #cf6d63;
+}
+
+.netsuite-environment-control > div,
+.netsuite-environment-control > label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.netsuite-environment-control > div {
+  flex-wrap: wrap;
+}
+
+.netsuite-environment-control > div > span,
+.netsuite-environment-control > label > span {
+  color: #5e706b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.netsuite-environment-control select {
+  min-width: 138px;
+  min-height: 36px;
+  padding: 7px 30px 7px 10px;
+  font-weight: 800;
+}
+
+.netsuite-environment-control > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.netsuite-environment-badge {
+  display: inline-flex;
+  min-height: 29px;
+  padding: 5px 11px;
+  align-items: center;
+  color: #194b72;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  background: #dcecf8;
+  border: 1px solid #7da6c7;
+  border-radius: 999px;
+}
+
+.netsuite-environment-badge--production {
+  color: #fff;
+  background: #a23d34;
+  border-color: #842d26;
+}
+
+.connection-panel .netsuite-environment-control {
+  grid-template-columns: 1fr;
+}
+
+.connection-panel .netsuite-environment-control > label {
+  justify-content: space-between;
+}
+
+.authentication-card__role,
+.authentication-card__error {
+  margin-top: 20px;
+  padding: 12px 14px;
+  color: #755622;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #fbf5e9;
+  border: 1px solid #eadab8;
+  border-radius: 6px;
+}
+
+.authentication-card__error {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: #7a3731;
+  background: #fff5f3;
+  border-color: #ebc7c3;
+}
+
+.authentication-card__error svg {
+  flex: 0 0 auto;
+}
+
+.netsuite-config-details {
+  margin: 22px 0 0;
+  overflow: hidden;
+  border: 1px solid #dce4e2;
+  border-radius: 6px;
+}
+
+.netsuite-config-details > div {
+  display: grid;
+  grid-template-columns: 125px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 44px;
+  padding: 10px 13px;
+  align-items: center;
+  border-bottom: 1px solid #e8edec;
+}
+
+.netsuite-config-details > div:last-child {
+  border-bottom: 0;
+}
+
+.netsuite-config-details dt {
+  color: #6e7c78;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.netsuite-config-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #2d443e;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.connection-panel .netsuite-config-details {
+  margin-top: 0;
+}
+
+.connection-panel .netsuite-config-details > div {
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 9px;
+  padding: 9px 10px;
+}
+
+.connection-panel .netsuite-config-details dd {
+  text-align: left;
+}
+
+.authentication-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.authentication-card__actions .authentication-card__action--wide {
+  flex-basis: 100%;
+}
+
+.authentication-card__actions .button {
+  min-width: 165px;
+}
+
+.sales-order-inspection-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 22px;
+  align-items: end;
+}
+
+.sales-order-inspection-controls .field-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.connection-panel .sales-order-inspection-controls {
+  grid-template-columns: 1fr;
+  padding-top: 18px;
+  border-top: 1px solid #edf0f0;
+}
+
+.connection-panel .sales-order-inspection-controls .button {
+  width: 100%;
+}
+
+.suiteql-diagnostic {
+  margin-top: 22px;
+  overflow: hidden;
+  color: #344843;
+  background: #f6f9f8;
+  border: 1px solid #d7e3df;
+  border-left: 4px solid #4a9a81;
+  border-radius: 7px;
+}
+
+.suiteql-diagnostic--error {
+  color: #6f332e;
+  background: #fff8f7;
+  border-color: #ebc7c3;
+  border-left-color: #d86d62;
+}
+
+.customer-resolution-diagnostic--review {
+  color: #755622;
+  background: #fffbf2;
+  border-color: #eadab8;
+  border-left-color: #d8a85b;
+}
+
+.suiteql-diagnostic h3,
+.suiteql-diagnostic > p {
+  margin: 0;
+  padding: 13px 15px 0;
+}
+
+.suiteql-diagnostic h3 {
+  color: inherit;
+  font-size: 13px;
+}
+
+.suiteql-diagnostic > p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.suiteql-diagnostic__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 13px 15px;
+}
+
+.suiteql-diagnostic__summary > div {
+  min-width: 0;
+}
+
+.suiteql-diagnostic__summary dt {
+  color: #6e7c78;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.suiteql-diagnostic__summary dd {
+  margin: 4px 0 0;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.suiteql-diagnostic__table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid #dfe8e5;
+}
+
+.suiteql-diagnostic__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.suiteql-diagnostic__table th,
+.suiteql-diagnostic__table td {
+  padding: 9px 15px;
+  border-bottom: 1px solid #e6edeb;
+}
+
+.suiteql-diagnostic__table th {
+  color: #65746f;
+  font-size: 10px;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.suiteql-diagnostic__table tr:last-child td {
+  border-bottom: 0;
+}
+
+.customer-resolution-diagnostic__table {
+  min-width: 620px;
+}
+
+.sales-order-inspection-diagnostic__header {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 15px;
+}
+
+.sales-order-inspection-diagnostic__header > div {
+  min-width: 0;
+}
+
+.sales-order-inspection-diagnostic__header dt {
+  color: #6e7c78;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.sales-order-inspection-diagnostic__header dd {
+  min-width: 0;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sales-order-inspection-diagnostic__table {
+  min-width: 1540px;
+}
+
+.sales-order-inspection-diagnostic__table td {
+  font-family: Consolas, 'Courier New', monospace;
+  vertical-align: top;
+}
+
+.suiteql-diagnostic__details {
+  margin: 13px 15px 15px;
+  font-size: 11px;
+}
+
+.suiteql-diagnostic__details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.suiteql-diagnostic__details dl {
+  margin: 10px 0 0;
+}
+
+.suiteql-diagnostic__details div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.suiteql-diagnostic__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.connection-panel .suiteql-diagnostic__summary {
+  grid-template-columns: 1fr;
+}
+
+.connection-panel .sales-order-inspection-diagnostic__header {
+  grid-template-columns: 1fr;
+}
+
+.connection-panel .suiteql-diagnostic__table th,
+.connection-panel .suiteql-diagnostic__table td {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.authentication-card__footnote {
+  margin-top: 18px;
+  color: #788581;
+  font-size: 10px;
+  line-height: 1.55;
 }
 
 .spin {

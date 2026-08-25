@@ -2,23 +2,24 @@
 
 ## Application Purpose
 
-Hauser Backlog Report is a private, read-only Windows desktop application for reviewing Sales Order backlog and its related manufacturing Work Orders. Its distinguishing feature is an expandable Work Order hierarchy: a Sales Order line remains the main report row while the top-level Work Order and recursively related subassembly Work Orders can be inspected together.
+Hauser Backlog Report is a private, read-only Windows desktop application for reviewing Sales Order backlog for six Hauser Company Stores customers. A Sales Order item line remains the report row, with an optional directly referenced top-level Work Order number and status. The active report does not traverse child Work Orders.
 
 The application is built with Electron, React, TypeScript, electron-vite, TanStack Table, and Zod. It runs locally as an installed desktop application and does not require a hosted website, custom backend, cloud database, or continuously running web server.
 
 ## Current scope
 
-The first milestone runs against realistic mock data and exercises the same renderer and data-source boundary intended for live data. It covers the six configured Hauser Company Stores customers, the 15-column backlog table, Sales Order search, customer filtering, refresh, sorting, pagination, and recursively expandable Work Order details.
+The installed application currently starts with live connection and field-mapping diagnostics. An explicit mock-mode development override exercises the six configured Hauser Company Stores customers, the flat 15-column table, Sales Order search, filtering, refresh, sorting, and pagination.
 
-Live NetSuite support is integration-ready but is not production-ready until the account configuration, report field mappings, backlog rules, and actual Work Order transaction relationships are verified. No unknown NetSuite internal IDs or custom field IDs are guessed in this repository.
+Live NetSuite support is integration-ready but the final production backlog query remains blocked until replacement-name precedence and the runtime representation of the top-level `createwo` field are verified. Unknown values are surfaced by diagnostics rather than guessed.
 
 ## Architecture and security
 
 - NetSuite authentication and requests belong exclusively to the Electron main process.
 - The renderer has no Node.js integration and communicates through a deliberately small typed preload API.
 - OAuth is designed for Authorization Code Grant with PKCE as a public desktop client; a confidential client secret is not bundled.
-- Persistent refresh tokens, when enabled, are encrypted with Electron `safeStorage`. Access tokens remain in memory where practical.
-- Backlog rows and Work Order relationships are retrieved independently and merged by internal ID to avoid quantity inflation from one-to-many joins.
+- Access tokens remain only in main-process memory. Refresh tokens are encrypted with Electron `safeStorage` and written as binary ciphertext under the current Windows user's application-data directory—never to JSON settings or renderer storage.
+- A refresh token is durably consumed before use. NetSuite's replacement refresh token is required and atomically becomes the only saved token, preventing reuse of a one-time Public Client refresh token.
+- The Sales Order field-mapping diagnostic currently returns only raw replacement and `createwo` values. It performs no secondary Item or Work Order lookup and never infers a Work Order by matching SKU.
 - Version 1 is read-only and does not create or update NetSuite records.
 
 See [Architecture](docs/architecture.md), [NetSuite field mapping](docs/netsuite-field-mapping.md), and [NetSuite integration TODOs](docs/netsuite-integration-todo.md) for details.
@@ -40,7 +41,7 @@ npm run dev
 
 Electron 42 and newer download the local development runtime on first launch; the `dev` script performs that official on-demand install automatically.
 
-The default development configuration is mock mode. The application should visibly report `Mock Data`, so sample records cannot be mistaken for live NetSuite results.
+Installed builds and development sessions default to the report home screen. Authenticated Production sessions load the verified live Sales Order columns; Connection opens diagnostics separately. To use fixtures during development, copy `.env.example` to `.env`; the application will visibly report `Mock Data`, so samples cannot be mistaken for NetSuite results.
 
 ## Mock Mode
 
@@ -50,22 +51,15 @@ Copy `.env.example` to `.env` if local overrides are needed and retain:
 DATA_SOURCE=mock
 ```
 
-Mock mode requires no NetSuite credentials and is the supported path for local development and automated tests. Mock records cover all six allowed customers, multiple shipment states and Work Order statuses, rows without Work Orders, child Work Orders, and a nested hierarchy.
+Mock mode requires no NetSuite credentials and is the supported path for local development and automated tests. Mock records cover all six allowed customers, decimal quantities, top-level Work Order statuses, and rows without Work Orders.
 
 ## Live Mode
 
-Live mode is reserved for integration work after the required account values and field mappings have been confirmed. Its non-secret configuration shape is documented in `.env.example`:
+The Electron main process bundles independent Sandbox and Production profiles containing only the non-secret account ID, SuiteTalk URL, public client ID, redirect URI, and scope. The redirect URI is `hauser-backlog://oauth/callback` and the scope is `rest_webservices` for both profiles.
 
-```text
-DATA_SOURCE=live
-NETSUITE_ACCOUNT_ID=
-NETSUITE_ACCOUNT_DOMAIN=
-NETSUITE_CLIENT_ID=
-NETSUITE_REDIRECT_URI=hauser-backlog://oauth/callback
-NETSUITE_SCOPE=rest_webservices
-```
+No client secret is bundled. Do not place access tokens, refresh tokens, private keys, or a client secret in `.env`. The live startup screen makes no backlog request; it is intentionally limited to Sign In, callback/token exchange, connection testing, and Sign Out until every pending mapping in `docs/netsuite-field-mapping.md` has been verified.
 
-Do not place access tokens, refresh tokens, private keys, or a client secret in `.env`. Sensitive tokens must never enter the renderer or Git history. Live backlog results must not be treated as authoritative until every pending mapping in `docs/netsuite-field-mapping.md` has been compared with the existing NetSuite backlog report.
+`Test Connection` is a real main-process REST Web Services probe. It obtains the current access token through the OAuth provider and requests `GET /services/rest/record/v1/metadata-catalog/customer` with `Accept: application/schema+json`. Only HTTP 200 produces `NetSuite REST connection successful.` The renderer receives a narrow typed result containing the outcome, HTTP status, sanitized message, and connection status—never the access token, Authorization header, or NetSuite response body.
 
 This repository intentionally does not include a NetSuite administrator setup tutorial.
 
@@ -150,11 +144,10 @@ release/                Generated Windows installer (ignored)
 
 Implemented software boundaries may be exercised with mocks. The following remain external prerequisites for trustworthy live reporting:
 
-- account-specific OAuth/Public Client configuration;
-- the six customer internal IDs;
-- verified Sales Order, line, quantity, date, Paint Name, Fabric Name, and Ship To fields;
-- the verified top-level Sales Order line-to-Work Order association;
-- the verified Work Order parent/child transaction relationship; and
+- NetSuite-side OAuth Public Client, consent, role, and permission verification;
+- live confirmation of replacement-field raw/display values and Item name precedence;
+- live proof that `transactionLine.createwo` is a top-level Work Order reference;
+- final reconciliation of the flat 15-column output; and
 - comparison and sign-off against the existing NetSuite report.
 
 The complete checklist is maintained in `docs/netsuite-integration-todo.md`.

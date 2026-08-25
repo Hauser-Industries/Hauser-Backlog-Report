@@ -1,11 +1,13 @@
 import type { BacklogDataSource } from '../data/backlogDataSource'
-import { filterBacklogRows, keepAllowedCustomerRows } from './backlogFilters'
 import type {
   BacklogFilter,
+  BacklogPageData,
   BacklogResponse,
-  BacklogRow,
+  SalesOrderGroup,
+  SalesOrderDetailsResult,
   SalesOrderSearchRequest
 } from '@shared/types/backlog'
+import { isAllowedCustomer } from '@shared/constants/customers'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
 
 export class BacklogService {
@@ -15,44 +17,85 @@ export class BacklogService {
   ) {}
 
   async getBacklog(filter: BacklogFilter = {}): Promise<BacklogResponse> {
-    return this.loadBacklog(filter)
+    return this.response(await this.dataSource.getBacklog(filter), 'success')
   }
 
   async refreshBacklog(filter: BacklogFilter = {}): Promise<BacklogResponse> {
-    return this.loadBacklog(filter)
+    this.dataSource.invalidateDetails?.()
+    return this.response(await this.dataSource.getBacklog(filter), 'success')
+  }
+
+  async getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult> {
+    return this.dataSource.getSalesOrderDetails(salesOrderInternalId)
   }
 
   async searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse> {
+    if (request.refreshDetails) this.dataSource.invalidateDetails?.()
     const salesOrderNumber = normalizeSalesOrderNumber(request.salesOrderNumber)
-    const sourceRows = await this.dataSource.getSalesOrder(salesOrderNumber)
-    const exactRows = sourceRows.filter(
-      (row) => row.salesOrderNumber.toUpperCase() === salesOrderNumber
+    const page = await this.dataSource.getSalesOrder(salesOrderNumber)
+    const exactSalesOrders = page.salesOrders.filter(
+      (salesOrder) => salesOrder.salesOrderNumber.toUpperCase() === salesOrderNumber
     )
 
-    if (exactRows.length === 0) return this.response([], 'not-found')
+    if (exactSalesOrders.length === 0) return this.emptyResponse(page, 'not-found')
 
-    const allowedRows = keepAllowedCustomerRows(exactRows)
-    if (allowedRows.length === 0) return this.response([], 'outside-allowed-customer')
+    const allowedSalesOrders = exactSalesOrders.filter((salesOrder) =>
+      isAllowedCustomer(salesOrder.customerName)
+    )
+    if (allowedSalesOrders.length === 0) {
+      return this.emptyResponse(page, 'outside-allowed-customer')
+    }
 
-    const filteredRows = filterBacklogRows(allowedRows, {
-      ...(request.customerName ? { customerName: request.customerName } : {})
-    })
+    const filteredSalesOrders = request.customerName
+      ? allowedSalesOrders.filter(
+          (salesOrder) => salesOrder.customerName === request.customerName
+        )
+      : allowedSalesOrders
 
-    return filteredRows.length > 0
-      ? this.response(filteredRows, 'success')
-      : this.response([], 'not-found')
+    return filteredSalesOrders.length > 0
+      ? this.response(
+          {
+            ...page,
+            salesOrders: filteredSalesOrders,
+            totalSalesOrders: filteredSalesOrders.length,
+            hasPrevious: false,
+            hasNext: false
+          },
+          'success'
+        )
+      : this.emptyResponse(page, 'not-found')
   }
 
-  private async loadBacklog(filter: BacklogFilter): Promise<BacklogResponse> {
-    const sourceRows = await this.dataSource.getBacklog(filter)
-    return this.response(filterBacklogRows(sourceRows, filter), 'success')
+  private emptyResponse(
+    page: BacklogPageData,
+    outcome: BacklogResponse['outcome']
+  ): BacklogResponse {
+    return this.response(
+      {
+        ...page,
+        salesOrders: [],
+        totalSalesOrders: 0,
+        hasPrevious: false,
+        hasNext: false
+      },
+      outcome
+    )
   }
 
-  private response(rows: BacklogRow[], outcome: BacklogResponse['outcome']): BacklogResponse {
+  private response(
+    page: BacklogPageData,
+    outcome: BacklogResponse['outcome']
+  ): BacklogResponse {
+    const salesOrders = this.allowedSalesOrders(page.salesOrders)
     return {
-      rows,
+      ...page,
+      salesOrders,
       lastUpdated: this.now().toISOString(),
       outcome
     }
+  }
+
+  private allowedSalesOrders(salesOrders: readonly SalesOrderGroup[]): SalesOrderGroup[] {
+    return salesOrders.filter((salesOrder) => isAllowedCustomer(salesOrder.customerName))
   }
 }

@@ -17,6 +17,8 @@ interface NetSuiteIntegrationErrorOptions {
   code: NetSuiteErrorCode
   retryable?: boolean
   status?: number
+  netSuiteErrorCode?: string
+  netSuiteErrorMessage?: string
   cause?: unknown
 }
 
@@ -24,6 +26,8 @@ export class NetSuiteIntegrationError extends Error {
   readonly code: NetSuiteErrorCode
   readonly retryable: boolean
   readonly status?: number
+  readonly netSuiteErrorCode?: string
+  readonly netSuiteErrorMessage?: string
 
   constructor(message: string, options: NetSuiteIntegrationErrorOptions) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause })
@@ -31,6 +35,12 @@ export class NetSuiteIntegrationError extends Error {
     this.code = options.code
     this.retryable = options.retryable ?? false
     if (options.status !== undefined) this.status = options.status
+    if (options.netSuiteErrorCode !== undefined) {
+      this.netSuiteErrorCode = options.netSuiteErrorCode
+    }
+    if (options.netSuiteErrorMessage !== undefined) {
+      this.netSuiteErrorMessage = options.netSuiteErrorMessage
+    }
   }
 }
 

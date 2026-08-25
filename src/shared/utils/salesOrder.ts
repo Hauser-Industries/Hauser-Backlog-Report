@@ -5,13 +5,15 @@ export class InvalidSalesOrderNumberError extends Error {
   }
 }
 
-export function normalizeSalesOrderNumber(input: string): string {
-  const normalized = input.trim().toUpperCase()
-  const match = /^(?:SO)?(\d+)$/.exec(normalized)
+const NORMALIZED_SALES_ORDER_PATTERN = /^SO[0-9]+$/
 
-  if (!match?.[1]) {
+export function normalizeSalesOrderNumber(input: string): string {
+  const trimmed = input.trim().toUpperCase()
+  const normalized = /^[0-9]+$/.test(trimmed) ? `SO${trimmed}` : trimmed
+
+  if (!NORMALIZED_SALES_ORDER_PATTERN.test(normalized)) {
     throw new InvalidSalesOrderNumberError()
   }
 
-  return `SO${match[1]}`
+  return normalized
 }

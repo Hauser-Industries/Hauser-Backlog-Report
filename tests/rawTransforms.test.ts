@@ -27,15 +27,23 @@ describe('raw backlog response transformation', () => {
           workOrderNumber: 'WO9001',
           salesOrderInternalId: 456,
           salesOrderNumber: 'so1234',
-          shipTo: null,
+          shipTo: 'A physical address that must not become the report Ship To',
           itemInternalId: 789,
           item: 'ABC',
           itemDescription: null,
+          paintItemInternalId: 101,
+          paintSku: 'PAINT-101',
           paintName: null,
+          fabricItemInternalId: 102,
+          fabricSku: 'FABRIC-102',
           fabricName: null,
+          weltItemInternalId: 103,
+          weltSku: 'WELT-103',
+          weltName: null,
+          buttonItemInternalId: 104,
+          buttonSku: 'BUTTON-104',
+          buttonName: null,
           quantity: '10.0000000004',
-          quantityShipped: '3.25',
-          quantityRemaining: '6.5',
           createdDate: '2026-08-01',
           dueDate: '2026-08-21',
           workOrderStatusCode: 'UNRECOGNIZED_CODE',
@@ -53,23 +61,32 @@ describe('raw backlog response transformation', () => {
       workOrderInternalId: '9001',
       itemInternalId: '789',
       poNumber: '',
-      shipTo: '',
+      shipTo: 'WATERLOO - HAUSER COMPANY STORES',
       itemDescription: '',
+      paintItemInternalId: '101',
+      paintSku: 'PAINT-101',
       paintName: '',
+      fabricItemInternalId: '102',
+      fabricSku: 'FABRIC-102',
       fabricName: '',
+      weltItemInternalId: '103',
+      weltSku: 'WELT-103',
+      weltName: '',
+      buttonItemInternalId: '104',
+      buttonSku: 'BUTTON-104',
+      buttonName: '',
       quantity: 10,
-      quantityShipped: 3.25,
-      quantityRemaining: 6.5,
       createdDate: '2026-08-01',
       dueDate: '2026-08-21',
-      workOrderStatus: {
-        code: 'UNRECOGNIZED_CODE',
-        label: 'Awaiting Engineering Review'
-      }
+      workOrderStatusCode: 'UNRECOGNIZED_CODE',
+      workOrderStatusLabel: 'Awaiting Engineering Review'
     })
+    expect(rows[0]).not.toHaveProperty('quantityShipped')
+    expect(rows[0]).not.toHaveProperty('quantityRemaining')
+    expect(rows[0]).not.toHaveProperty('workOrderHierarchy')
   })
 
-  it('uses the centralized remaining calculation only when the mapped value is absent', () => {
+  it('ignores retired shipped/remaining inputs and always copies Customer Name to Ship To', () => {
     const [row] = transformBacklogPayload({
       items: [
         {
@@ -78,12 +95,16 @@ describe('raw backlog response transformation', () => {
           salesOrderNumber: 'SO1',
           item: 'ABC',
           quantity: 10,
-          quantityShipped: 3
+          shipTo: 'Unrelated address',
+          quantityShipped: 3,
+          quantityRemaining: 7
         }
       ]
     })
 
-    expect(row?.quantityRemaining).toBe(7)
+    expect(row?.shipTo).toBe('MAIN WAREHOUSE - HAUSER COMPANY STORES')
+    expect(row).not.toHaveProperty('quantityShipped')
+    expect(row).not.toHaveProperty('quantityRemaining')
   })
 
   it('identifies the failing record index for malformed payload data', () => {

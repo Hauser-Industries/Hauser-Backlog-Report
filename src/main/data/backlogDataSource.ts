@@ -1,4 +1,8 @@
-import type { BacklogFilter, BacklogRow } from '@shared/types/backlog'
+import type {
+  BacklogFilter,
+  BacklogPageData,
+  SalesOrderDetailsResult
+} from '@shared/types/backlog'
 
 /**
  * Main-process boundary used by both mock data and the future NetSuite adapter.
@@ -6,6 +10,8 @@ import type { BacklogFilter, BacklogRow } from '@shared/types/backlog'
  * BacklogService applies the allowlist again before returning data to IPC.
  */
 export interface BacklogDataSource {
-  getBacklog(filter: BacklogFilter): Promise<BacklogRow[]>
-  getSalesOrder(salesOrderNumber: string): Promise<BacklogRow[]>
+  getBacklog(filter: BacklogFilter): Promise<BacklogPageData>
+  getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
+  getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
+  invalidateDetails?(): void
 }

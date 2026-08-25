@@ -1,33 +1,19 @@
 import { normalizeQuantity } from '@shared/utils/quantity'
 
 import { UnverifiedFieldMappingError } from '../errors'
+import { parseNetSuiteNumber } from './netSuiteNumber'
 
 export type QuantitySignRule = 'as-returned' | 'invert' | 'absolute'
-
-export type RemainingQuantityRule =
-  { mode: 'source'; sign: QuantitySignRule } | { mode: 'ordered-minus-shipped' }
 
 export interface VerifiedQuantityNormalization {
   verified: true
   orderedSign: QuantitySignRule
-  shippedSign: QuantitySignRule
-  remaining: RemainingQuantityRule
-}
-
-export interface NormalizedBacklogQuantities {
-  quantity: number
-  quantityShipped: number
-  quantityRemaining: number
 }
 
 function parseExternalQuantity(value: unknown): number {
   if (value === null || value === undefined || value === '') return 0
-  if (typeof value !== 'number' && typeof value !== 'string') {
-    throw new TypeError('NetSuite quantity must be a number, numeric string, or empty value.')
-  }
-
-  const parsed = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(parsed)) throw new TypeError('NetSuite returned a non-numeric quantity.')
+  const parsed = parseNetSuiteNumber(value)
+  if (parsed === null) throw new TypeError('NetSuite returned a non-numeric quantity.')
   return normalizeQuantity(parsed)
 }
 
@@ -45,24 +31,24 @@ export function normalizeOptionalQuantity(
   return applySign(parseExternalQuantity(value), sign)
 }
 
-export function normalizeBacklogQuantities(
-  raw: { ordered: unknown; shipped: unknown; remaining: unknown },
+export function normalizeBacklogQuantity(
+  raw: unknown,
   rules?: VerifiedQuantityNormalization
-): NormalizedBacklogQuantities {
+): number {
   if (!rules?.verified) {
-    throw new UnverifiedFieldMappingError([
-      'quantity source/sign convention',
-      'quantity shipped source/sign convention',
-      'quantity remaining rule'
-    ])
+    throw new UnverifiedFieldMappingError(['quantity source/sign convention'])
   }
+  return applySign(parseExternalQuantity(raw), rules.orderedSign)
+}
 
-  const quantity = applySign(parseExternalQuantity(raw.ordered), rules.orderedSign)
-  const quantityShipped = applySign(parseExternalQuantity(raw.shipped), rules.shippedSign)
-  const quantityRemaining =
-    rules.remaining.mode === 'source'
-      ? applySign(parseExternalQuantity(raw.remaining), rules.remaining.sign)
-      : normalizeQuantity(quantity - quantityShipped)
-
-  return { quantity, quantityShipped, quantityRemaining }
+/** Shared by the live report and the proven Sales Order inspector. */
+export function normalizeSalesOrderReportQuantity(
+  raw: unknown,
+  rules: VerifiedQuantityNormalization
+): number | null {
+  if (!rules.verified) {
+    throw new UnverifiedFieldMappingError(['quantity source/sign convention'])
+  }
+  const parsed = parseNetSuiteNumber(raw)
+  return parsed === null ? null : applySign(parsed, rules.orderedSign)
 }

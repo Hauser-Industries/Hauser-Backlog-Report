@@ -4,8 +4,11 @@ import { createPkceValues, oauthStateMatches } from '../src/main/netsuite/auth/p
 import {
   createNetSuiteOAuthEndpoints,
   loadNetSuiteConfig,
-  NETSUITE_SCOPE
+  NETSUITE_SCOPE,
+  PACKAGED_NETSUITE_CONFIG
 } from '../src/main/netsuite/config/netsuiteConfig'
+import { getDataSourceMode } from '../src/main/config/dataSourceMode'
+import { getNetSuiteEnvironmentProfile } from '../src/main/netsuite/config/environmentProfiles'
 
 describe('NetSuite OAuth configuration', () => {
   it('reports every required value when configuration is absent', () => {
@@ -13,29 +16,48 @@ describe('NetSuite OAuth configuration', () => {
 
     expect(state).toEqual({
       configured: false,
-      missing: [
-        'NETSUITE_ACCOUNT_ID',
-        'NETSUITE_ACCOUNT_DOMAIN',
-        'NETSUITE_CLIENT_ID',
-        'NETSUITE_REDIRECT_URI'
-      ]
+      missing: ['accountId', 'suiteTalkUrl', 'clientId', 'redirectUri', 'scope']
     })
   })
 
-  it('derives documented OAuth paths from the configured account domain', () => {
-    const endpoints = createNetSuiteOAuthEndpoints({
-      accountId: '1234567_SB1',
-      accountDomain: 'https://1234567-sb1.suitetalk.api.netsuite.com',
-      clientId: 'public-client-id',
-      redirectUri: 'hauser-backlog://oauth/callback',
-      scope: NETSUITE_SCOPE
+  it('loads the exact public configuration bundled with the application', () => {
+    expect(loadNetSuiteConfig()).toEqual({
+      configured: true,
+      config: {
+        accountId: '3850367_SB1',
+        suiteTalkUrl: 'https://3850367-sb1.suitetalk.api.netsuite.com',
+        clientId: 'c5dd9741a779dbfe50d63939f326b2a3a5b119b4a5b0034d362825e7eec76ce4',
+        redirectUri: 'hauser-backlog://oauth/callback',
+        scope: NETSUITE_SCOPE
+      }
     })
+  })
+
+  it('derives documented OAuth paths from the packaged SuiteTalk URL', () => {
+    const endpoints = createNetSuiteOAuthEndpoints(PACKAGED_NETSUITE_CONFIG)
 
     expect(endpoints).toEqual({
-      authorizationEndpoint: 'https://1234567-sb1.app.netsuite.com/app/login/oauth2/authorize.nl',
+      authorizationEndpoint: 'https://3850367-sb1.app.netsuite.com/app/login/oauth2/authorize.nl',
       tokenEndpoint:
-        'https://1234567-sb1.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token'
+        'https://3850367-sb1.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token'
     })
+  })
+
+  it('derives production OAuth paths from the independent production profile', () => {
+    const production = getNetSuiteEnvironmentProfile('3850367')
+    if (!production) throw new Error('Expected the production profile.')
+
+    expect(createNetSuiteOAuthEndpoints(production)).toEqual({
+      authorizationEndpoint: 'https://3850367.app.netsuite.com/app/login/oauth2/authorize.nl',
+      tokenEndpoint: 'https://3850367.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token'
+    })
+    expect(production).not.toHaveProperty('clientSecret')
+  })
+
+  it('defaults packaged builds to live and makes mock mode an explicit override', () => {
+    expect(getDataSourceMode({})).toBe('live')
+    expect(getDataSourceMode({ DATA_SOURCE: 'mock' })).toBe('mock')
+    expect(getDataSourceMode({ DATA_SOURCE: 'live' })).toBe('live')
   })
 })
 

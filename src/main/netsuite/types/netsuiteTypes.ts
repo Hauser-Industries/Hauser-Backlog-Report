@@ -17,6 +17,14 @@ export interface SuiteQlQueryResult {
   pages: number
 }
 
+export interface SuiteQLResponse<T> {
+  count: number
+  offset: number
+  totalResults: number
+  hasMore: boolean
+  items: T[]
+}
+
 export type WorkOrderRecord = Omit<WorkOrderNode, 'children'>
 
 export type NetSuiteEndpointCategory = 'suiteql' | 'rest-record' | 'oauth'

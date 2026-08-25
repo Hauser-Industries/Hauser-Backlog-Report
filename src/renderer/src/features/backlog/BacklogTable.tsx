@@ -1,290 +1,295 @@
-import { Fragment, useMemo, useState } from 'react'
-import {
-  flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type ColumnDef,
-  type ExpandedState,
-  type PaginationState,
-  type SortingState
-} from '@tanstack/react-table'
-import type { BacklogRow } from '@shared/types/backlog'
+import { Fragment, useState, type KeyboardEvent } from 'react'
+
+import type {
+  BacklogItemRow,
+  SalesOrderDetailsResult,
+  SalesOrderGroup,
+  SalesOrderItemDetail
+} from '@shared/types/backlog'
 import { formatDate } from '@shared/utils/date'
 import { formatQuantity } from '@shared/utils/quantity'
-import { ChevronIcon, SortIcon } from '../../components/icons'
+import { ChevronIcon } from '../../components/icons'
 import { StatusBadge } from '../../components/StatusBadge'
-import { WorkOrderHierarchyPanel } from '../work-order-tree/WorkOrderHierarchyPanel'
 
 interface BacklogTableProps {
-  rows: BacklogRow[]
+  salesOrders: SalesOrderGroup[]
+  page: number
+  pageSize: number
+  totalSalesOrders: number
+  hasPrevious: boolean
+  hasNext: boolean
+  onPageChange: (page: number) => void
+  onLoadDetails: (salesOrderInternalId: string) => Promise<SalesOrderDetailsResult>
 }
 
-const PAGE_SIZES = [50, 100, 250] as const
-
-function countDescendants(root: BacklogRow['workOrderHierarchy']): number {
-  if (!root) return 0
-  return root.children.reduce((total, child) => total + 1 + countDescendants(child), 0)
+interface DetailState {
+  loading: boolean
+  items: SalesOrderItemDetail[]
+  error?: string
 }
 
-function displayText(value: string | undefined): string {
-  return value?.trim() || '—'
+const COLUMN_WIDTHS = [
+  260, 125, 115, 130, 230, 125, 100, 125, 180, 130, 190, 125, 180, 125, 180, 120,
+  120, 165
+] as const
+
+const HEADERS = [
+  'Customer Name',
+  'Sales Order #',
+  'PO #',
+  'Item',
+  'Item Description',
+  'Work Order #',
+  'Sum of Qty.',
+  'Paint Name',
+  'Paint Description',
+  'Fabric Name',
+  'Fabric Description',
+  'Welt Name',
+  'Welt Description',
+  'Button Name',
+  'Button Description',
+  'Created Date',
+  'Due Date',
+  'WO Status'
+] as const
+
+function displayText(value: string | null | undefined): string {
+  return value?.trim() || ''
 }
 
-export function BacklogTable({ rows }: BacklogTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: 'dueDate', desc: false },
-    { id: 'salesOrderNumber', desc: false }
-  ])
-  const [expanded, setExpanded] = useState<ExpandedState>({})
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 100 })
+function displayDate(value: string | null | undefined): string {
+  if (!value) return ''
+  const formatted = formatDate(value)
+  return formatted === '—' ? '' : formatted
+}
 
-  const columns = useMemo<ColumnDef<BacklogRow>[]>(
-    () => [
-      {
-        accessorKey: 'customerName',
-        header: 'Customer Name',
-        size: 265,
-        cell: ({ getValue }) => (
-          <span className="customer-cell">{displayText(getValue<string>())}</span>
-        )
-      },
-      {
-        accessorKey: 'poNumber',
-        header: 'PO #',
-        size: 120,
-        cell: ({ getValue }) => displayText(getValue<string>())
-      },
-      {
-        accessorKey: 'workOrderNumber',
-        header: 'Work Order #',
-        size: 130,
-        cell: ({ getValue }) => displayText(getValue<string | undefined>())
-      },
-      {
-        accessorKey: 'salesOrderNumber',
-        header: 'Sales Order #',
-        size: 130,
-        cell: ({ getValue }) => <strong>{displayText(getValue<string>())}</strong>
-      },
-      {
-        accessorKey: 'shipTo',
-        header: 'Ship To',
-        size: 200,
-        enableSorting: false,
-        cell: ({ getValue }) => displayText(getValue<string>())
-      },
-      {
-        accessorKey: 'item',
-        header: 'Item',
-        size: 130,
-        cell: ({ getValue }) => <strong>{displayText(getValue<string>())}</strong>
-      },
-      {
-        accessorKey: 'itemDescription',
-        header: 'Item Description',
-        size: 245,
-        enableSorting: false,
-        cell: ({ getValue }) => displayText(getValue<string>())
-      },
-      {
-        accessorKey: 'paintName',
-        header: 'Paint Name',
-        size: 145,
-        enableSorting: false,
-        cell: ({ getValue }) => displayText(getValue<string>())
-      },
-      {
-        accessorKey: 'fabricName',
-        header: 'Fabric Name',
-        size: 155,
-        enableSorting: false,
-        cell: ({ getValue }) => displayText(getValue<string>())
-      },
-      {
-        accessorKey: 'quantity',
-        header: 'Sum of Qty.',
-        size: 118,
-        cell: ({ getValue }) => (
-          <span className="numeric">{formatQuantity(getValue<number>())}</span>
-        )
-      },
-      {
-        accessorKey: 'quantityShipped',
-        header: 'Sum of Qty. Ship',
-        size: 145,
-        cell: ({ getValue }) => (
-          <span className="numeric">{formatQuantity(getValue<number>())}</span>
-        )
-      },
-      {
-        accessorKey: 'quantityRemaining',
-        header: 'Sum of Qty. Rmn',
-        size: 145,
-        cell: ({ getValue }) => (
-          <span className="numeric numeric--emphasis">{formatQuantity(getValue<number>())}</span>
-        )
-      },
-      {
-        accessorKey: 'createdDate',
-        header: 'Created Date',
-        size: 135,
-        cell: ({ getValue }) => formatDate(getValue<string | undefined>())
-      },
-      {
-        accessorKey: 'dueDate',
-        header: 'Due Date',
-        size: 135,
-        cell: ({ getValue }) => formatDate(getValue<string | undefined>())
-      },
-      {
-        id: 'workOrderStatus',
-        accessorFn: (row) => row.workOrderStatus?.label ?? '',
-        header: 'WO Status',
-        size: 210,
-        cell: ({ row, getValue }) => {
-          if (!row.original.workOrderNumber || !row.original.workOrderStatus) {
-            return <span className="no-work-order">No Work Order</span>
-          }
+function displayWorkOrderStatus(value: string | undefined): string {
+  const normalized = value?.trim() ?? ''
+  return normalized === 'No Work Order' ? '' : normalized
+}
 
-          const relatedCount = countDescendants(row.original.workOrderHierarchy)
-          const statusLabel = getValue<string>() || 'Unknown'
-
-          if (!row.getCanExpand()) return <StatusBadge label={statusLabel} />
-
-          return (
-            <button
-              className="status-expand-button"
-              type="button"
-              onClick={row.getToggleExpandedHandler()}
-              aria-expanded={row.getIsExpanded()}
-              aria-label={`${row.getIsExpanded() ? 'Collapse' : 'Expand'} ${row.original.workOrderNumber} hierarchy`}
-            >
-              <ChevronIcon direction={row.getIsExpanded() ? 'down' : 'right'} />
-              <StatusBadge label={statusLabel} />
-              {relatedCount > 0 ? (
-                <span className="related-count">{relatedCount} related</span>
-              ) : null}
-            </button>
-          )
-        }
-      }
-    ],
-    []
+function itemDetail(
+  item: BacklogItemRow,
+  details: readonly SalesOrderItemDetail[]
+): SalesOrderItemDetail | undefined {
+  return details.find(
+    (detail) =>
+      (detail.lineId !== undefined && detail.lineId === item.lineId) ||
+      (detail.lineSequence !== undefined && detail.lineSequence === item.lineSequence)
   )
+}
 
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting, expanded, pagination },
-    onSortingChange: setSorting,
-    onExpandedChange: setExpanded,
-    onPaginationChange: setPagination,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getRowId: (row) => row.rowKey,
-    getRowCanExpand: (row) => Boolean(row.original.workOrderHierarchy),
-    autoResetPageIndex: true
-  })
+function mergeItem(
+  item: BacklogItemRow,
+  details: readonly SalesOrderItemDetail[]
+): BacklogItemRow {
+  const detail = itemDetail(item, details)
+  return detail ? { ...item, ...detail } : item
+}
 
-  const firstVisibleRow = rows.length === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1
-  const lastVisibleRow = Math.min((pagination.pageIndex + 1) * pagination.pageSize, rows.length)
+export function BacklogTable({
+  salesOrders,
+  page,
+  pageSize,
+  totalSalesOrders,
+  hasPrevious,
+  hasNext,
+  onPageChange,
+  onLoadDetails
+}: BacklogTableProps) {
+  const [expandedSalesOrders, setExpandedSalesOrders] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [detailBySalesOrder, setDetailBySalesOrder] = useState<Record<string, DetailState>>({})
+
+  const toggleSalesOrder = (salesOrder: SalesOrderGroup): void => {
+    const id = salesOrder.salesOrderInternalId
+    const willExpand = !expandedSalesOrders.has(id)
+    setExpandedSalesOrders((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+    if (!willExpand || detailBySalesOrder[id]) return
+    setDetailBySalesOrder((current) => ({
+      ...current,
+      [id]: { loading: true, items: [] }
+    }))
+    void onLoadDetails(id)
+      .then((result) => {
+        setDetailBySalesOrder((current) => ({
+          ...current,
+          [id]: result.success
+            ? { loading: false, items: result.items }
+            : { loading: false, items: [], error: result.message }
+        }))
+      })
+      .catch(() => {
+        setDetailBySalesOrder((current) => ({
+          ...current,
+          [id]: {
+            loading: false,
+            items: [],
+            error: 'Optional item details could not be loaded for this Sales Order.'
+          }
+        }))
+      })
+  }
+
+  const handleParentKeyDown = (
+    event: KeyboardEvent<HTMLTableRowElement>,
+    salesOrder: SalesOrderGroup
+  ): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    toggleSalesOrder(salesOrder)
+  }
+
+  const firstVisible = totalSalesOrders === 0 ? 0 : page * pageSize + 1
+  const lastVisible = Math.min((page + 1) * pageSize, totalSalesOrders)
+  const pageCount = Math.max(1, Math.ceil(totalSalesOrders / pageSize))
 
   return (
     <div className="report-table-shell">
       <div
         className="report-table-scroll"
         tabIndex={0}
-        aria-label="Backlog report table, horizontally scrollable"
+        aria-label="Backlog report table, horizontally and vertically scrollable"
       >
-        <table className="report-table" style={{ width: table.getTotalSize() }}>
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  const sortDirection = header.column.getIsSorted()
-                  return (
-                    <th
-                      key={header.id}
-                      style={{ width: header.getSize() }}
-                      aria-sort={
-                        sortDirection === 'asc'
-                          ? 'ascending'
-                          : sortDirection === 'desc'
-                            ? 'descending'
-                            : undefined
-                      }
-                    >
-                      {header.column.getCanSort() ? (
-                        <button type="button" onClick={header.column.getToggleSortingHandler()}>
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          <SortIcon sortDirection={sortDirection} />
-                        </button>
-                      ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
-                      )}
-                    </th>
-                  )
-                })}
-              </tr>
+        <table className="report-table report-table--grouped">
+          <colgroup>
+            {COLUMN_WIDTHS.map((width, index) => (
+              <col key={HEADERS[index]} style={{ width }} />
             ))}
+          </colgroup>
+          <thead>
+            <tr>
+              {HEADERS.map((header) => (
+                <th key={header}>{header}</th>
+              ))}
+            </tr>
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <Fragment key={row.id}>
-                <tr
-                  className={row.getIsExpanded() ? 'report-row report-row--expanded' : 'report-row'}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            {salesOrders.map((salesOrder) => {
+              const id = salesOrder.salesOrderInternalId
+              const expanded = expandedSalesOrders.has(id)
+              const detailState = detailBySalesOrder[id]
+              return (
+                <Fragment key={id}>
+                  <tr
+                    className={
+                      expanded
+                        ? 'report-row sales-order-row report-row--expanded'
+                        : 'report-row sales-order-row'
+                    }
+                    tabIndex={0}
+                    aria-expanded={expanded}
+                    onClick={() => toggleSalesOrder(salesOrder)}
+                    onKeyDown={(event) => handleParentKeyDown(event, salesOrder)}
+                  >
+                    <td>
+                      <span className="customer-cell">{displayText(salesOrder.customerName)}</span>
                     </td>
-                  ))}
-                </tr>
-                {row.getIsExpanded() && row.original.workOrderHierarchy ? (
-                  <tr className="hierarchy-detail-row">
-                    <td colSpan={columns.length}>
-                      <WorkOrderHierarchyPanel root={row.original.workOrderHierarchy} />
+                    <td>
+                      <button
+                        className="sales-order-expand-button"
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${salesOrder.salesOrderNumber}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          toggleSalesOrder(salesOrder)
+                        }}
+                      >
+                        <ChevronIcon direction={expanded ? 'down' : 'right'} />
+                        <strong>{displayText(salesOrder.salesOrderNumber)}</strong>
+                      </button>
                     </td>
+                    <td>{displayText(salesOrder.poNumber)}</td>
+                    {Array.from({ length: 12 }, (_, index) => (
+                      <td key={`parent-empty-${index}`} />
+                    ))}
+                    <td>{displayDate(salesOrder.createdDate)}</td>
+                    <td>{displayDate(salesOrder.dueDate)}</td>
+                    <td />
                   </tr>
-                ) : null}
-              </Fragment>
-            ))}
+                  {expanded
+                    ? salesOrder.items.map((basicItem) => {
+                        const item = mergeItem(basicItem, detailState?.items ?? [])
+                        return (
+                          <tr className="report-row sales-order-item-row" key={item.rowKey}>
+                            <td>
+                              <span className="customer-cell">
+                                {displayText(salesOrder.customerName)}
+                              </span>
+                            </td>
+                            <td>
+                              <strong>{displayText(salesOrder.salesOrderNumber)}</strong>
+                            </td>
+                            <td>{displayText(salesOrder.poNumber)}</td>
+                            <td>
+                              <span className="item-cell">{displayText(item.item)}</span>
+                            </td>
+                            <td>{displayText(item.itemDescription)}</td>
+                            <td>{displayText(item.workOrderNumber)}</td>
+                            <td>
+                              <span className="numeric numeric--emphasis">
+                                {formatQuantity(item.quantity)}
+                              </span>
+                            </td>
+                            <td>{displayText(item.paintName)}</td>
+                            <td>{displayText(item.paintDescription)}</td>
+                            <td>{displayText(item.fabricName)}</td>
+                            <td>{displayText(item.fabricDescription)}</td>
+                            <td>{displayText(item.weltName)}</td>
+                            <td>{displayText(item.weltDescription)}</td>
+                            <td>{displayText(item.buttonName)}</td>
+                            <td>{displayText(item.buttonDescription)}</td>
+                            <td>{displayDate(salesOrder.createdDate)}</td>
+                            <td>{displayDate(salesOrder.dueDate)}</td>
+                            <td>
+                              {displayWorkOrderStatus(item.workOrderStatus) ? (
+                                <StatusBadge
+                                  label={displayWorkOrderStatus(item.workOrderStatus)}
+                                />
+                              ) : null}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    : null}
+                  {expanded && detailState?.loading ? (
+                    <tr className="optional-detail-row">
+                      <td colSpan={HEADERS.length}>Loading optional item details…</td>
+                    </tr>
+                  ) : null}
+                  {expanded && detailState?.error ? (
+                    <tr className="optional-detail-row optional-detail-row--error">
+                      <td colSpan={HEADERS.length}>{detailState.error}</td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      <div className="table-pagination" aria-label="Table pagination">
+      <div className="table-pagination" aria-label="Sales Order pagination">
         <span>
-          Showing {firstVisibleRow}–{lastVisibleRow} of {rows.length}
+          Showing Sales Orders {firstVisible}–{lastVisible} of {totalSalesOrders}
         </span>
         <div className="table-pagination__controls">
-          <label>
-            Rows per page
-            <select
-              value={pagination.pageSize}
-              onChange={(event) => table.setPageSize(Number(event.target.value))}
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
-          </span>
-          <button
-            type="button"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
+          <button type="button" onClick={() => onPageChange(page - 1)} disabled={!hasPrevious}>
             Previous
           </button>
-          <button type="button" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+          <span>
+            Page {page + 1} of {pageCount}
+          </span>
+          <button type="button" onClick={() => onPageChange(page + 1)} disabled={!hasNext}>
             Next
           </button>
         </div>

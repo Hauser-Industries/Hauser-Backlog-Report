@@ -1,6 +1,6 @@
 import type { WorkOrderRecord } from '../data/workOrderRecord'
 import { buildWorkOrderHierarchyMap } from './workOrderHierarchy'
-import type { BacklogRow } from '@shared/types/backlog'
+import type { BacklogRow, BacklogRowWithHierarchy } from '@shared/types/backlog'
 
 /**
  * Attaches independently fetched work-order trees without changing report-row
@@ -9,7 +9,7 @@ import type { BacklogRow } from '@shared/types/backlog'
 export function attachWorkOrderHierarchies(
   rows: readonly BacklogRow[],
   workOrderRecords: readonly WorkOrderRecord[]
-): BacklogRow[] {
+): BacklogRowWithHierarchy[] {
   const rootIds = rows.flatMap((row) => (row.workOrderInternalId ? [row.workOrderInternalId] : []))
   const hierarchyByRoot = buildWorkOrderHierarchyMap(workOrderRecords, rootIds)
 

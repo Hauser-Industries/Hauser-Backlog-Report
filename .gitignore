@@ -34,6 +34,7 @@ oauth-tokens*
 token-store*
 tokens.json
 *.token
+netsuite-refresh-token.bin*
 
 # Certificates and private keys
 *.p12

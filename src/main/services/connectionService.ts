@@ -1,10 +1,28 @@
-import type { ConnectionStatus, DataSourceMode } from '@shared/types/backlog'
+import type {
+  ConnectionStatus,
+  ConnectionTestResult,
+  DataSourceMode,
+  InspectSalesOrderOutcome,
+  InspectSalesOrderRequest,
+  InspectSalesOrderResult,
+  NetSuiteEnvironment,
+  NetSuiteRestConnectionOutcome,
+  NetSuiteSuiteQlOutcome,
+  ResolveCustomerIdsOutcome,
+  ResolveCustomerIdsResult,
+  SuiteQlTestResult,
+  SwitchNetSuiteEnvironmentRequest
+} from '@shared/types/backlog'
 
 export interface LiveConnectionAdapter {
   getStatus(): Promise<ConnectionStatus>
   signIn(): Promise<void>
   signOut(): Promise<void>
-  testConnection(): Promise<void>
+  testConnection(): Promise<NetSuiteRestConnectionOutcome>
+  testSuiteQl(): Promise<NetSuiteSuiteQlOutcome>
+  resolveCustomerIds(): Promise<ResolveCustomerIdsOutcome>
+  inspectSalesOrder(salesOrderNumber: string): Promise<InspectSalesOrderOutcome>
+  switchEnvironment(environment: NetSuiteEnvironment): Promise<ConnectionStatus>
 }
 
 export interface LiveConfigurationSummary {
@@ -38,10 +56,27 @@ export class ConnectionService {
     return adapter.getStatus()
   }
 
-  async testConnection(): Promise<ConnectionStatus> {
+  async testConnection(): Promise<ConnectionTestResult> {
     const adapter = this.requireLiveAdapter()
-    await adapter.testConnection()
-    return adapter.getStatus()
+    const outcome = await adapter.testConnection()
+    const connectionStatus = await adapter.getStatus()
+    return outcome.ok ? { ...outcome, connectionStatus } : { ...outcome, connectionStatus }
+  }
+
+  async testSuiteQl(): Promise<SuiteQlTestResult> {
+    return this.requireLiveAdapter().testSuiteQl()
+  }
+
+  async resolveCustomerIds(): Promise<ResolveCustomerIdsResult> {
+    return this.requireLiveAdapter().resolveCustomerIds()
+  }
+
+  async inspectSalesOrder(request: InspectSalesOrderRequest): Promise<InspectSalesOrderResult> {
+    return this.requireLiveAdapter().inspectSalesOrder(request.salesOrderNumber)
+  }
+
+  async switchEnvironment(request: SwitchNetSuiteEnvironmentRequest): Promise<ConnectionStatus> {
+    return this.requireLiveAdapter().switchEnvironment(request.environment)
   }
 
   private requireLiveAdapter(): LiveConnectionAdapter {

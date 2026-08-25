@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
-import type { BacklogRow, WorkOrderStatus } from '@shared/types/backlog'
+import type { BacklogRow } from '@shared/types/backlog'
 import type { SuiteQlRecord } from '../types/netsuiteTypes'
 import type { VerifiedQuantityNormalization } from './quantityNormalization'
 import { NetSuiteIntegrationError } from '../errors'
-import { normalizeBacklogQuantities } from './quantityNormalization'
+import { normalizeBacklogQuantity } from './quantityNormalization'
 
 const scalar = z.union([z.string(), z.number(), z.null()])
 
@@ -19,15 +19,22 @@ export const backlogRecordSchema = z
     work_order_number: scalar.optional(),
     sales_order_internal_id: scalar.optional(),
     sales_order_number: scalar,
-    ship_to: scalar.optional(),
     item_internal_id: scalar.optional(),
     item: scalar,
     item_description: scalar.optional(),
+    paint_item_internal_id: scalar.optional(),
+    paint_sku: scalar.optional(),
     paint_name: scalar.optional(),
+    fabric_item_internal_id: scalar.optional(),
+    fabric_sku: scalar.optional(),
     fabric_name: scalar.optional(),
+    welt_item_internal_id: scalar.optional(),
+    welt_sku: scalar.optional(),
+    welt_name: scalar.optional(),
+    button_item_internal_id: scalar.optional(),
+    button_sku: scalar.optional(),
+    button_name: scalar.optional(),
     quantity: scalar.optional(),
-    quantity_shipped: scalar.optional(),
-    quantity_remaining: scalar.optional(),
     created_date: scalar.optional(),
     due_date: scalar.optional(),
     work_order_status_code: scalar.optional(),
@@ -42,16 +49,6 @@ function text(value: string | number | null | undefined): string {
 function optionalText(value: string | number | null | undefined): string | undefined {
   const normalized = text(value)
   return normalized ? normalized : undefined
-}
-
-function status(
-  codeValue: string | number | null | undefined,
-  labelValue: string | number | null | undefined
-): WorkOrderStatus | undefined {
-  const label = optionalText(labelValue)
-  if (!label) return undefined
-  const code = optionalText(codeValue)
-  return { ...(code ? { code } : {}), label }
 }
 
 export function transformBacklogRecord(
@@ -77,22 +74,24 @@ export function transformBacklogRecord(
     })
   }
 
-  const quantities = normalizeBacklogQuantities(
-    {
-      ordered: value.quantity,
-      shipped: value.quantity_shipped,
-      remaining: value.quantity_remaining
-    },
-    quantityRules
-  )
+  const quantity = normalizeBacklogQuantity(value.quantity, quantityRules)
   const customerInternalId = optionalText(value.customer_internal_id)
   const workOrderInternalId = optionalText(value.work_order_internal_id)
   const workOrderNumber = optionalText(value.work_order_number)
   const salesOrderInternalId = optionalText(value.sales_order_internal_id)
   const itemInternalId = optionalText(value.item_internal_id)
+  const paintItemInternalId = optionalText(value.paint_item_internal_id)
+  const paintSku = optionalText(value.paint_sku)
+  const fabricItemInternalId = optionalText(value.fabric_item_internal_id)
+  const fabricSku = optionalText(value.fabric_sku)
+  const weltItemInternalId = optionalText(value.welt_item_internal_id)
+  const weltSku = optionalText(value.welt_sku)
+  const buttonItemInternalId = optionalText(value.button_item_internal_id)
+  const buttonSku = optionalText(value.button_sku)
   const createdDate = optionalText(value.created_date)
   const dueDate = optionalText(value.due_date)
-  const workOrderStatus = status(value.work_order_status_code, value.work_order_status_label)
+  const workOrderStatusCode = optionalText(value.work_order_status_code)
+  const workOrderStatusLabel = optionalText(value.work_order_status_label)
 
   return {
     rowKey,
@@ -103,16 +102,27 @@ export function transformBacklogRecord(
     ...(workOrderNumber ? { workOrderNumber } : {}),
     ...(salesOrderInternalId ? { salesOrderInternalId } : {}),
     salesOrderNumber,
-    shipTo: text(value.ship_to),
+    shipTo: customerName,
     ...(itemInternalId ? { itemInternalId } : {}),
     item,
     itemDescription: text(value.item_description),
+    ...(paintItemInternalId ? { paintItemInternalId } : {}),
+    ...(paintSku ? { paintSku } : {}),
     paintName: text(value.paint_name),
+    ...(fabricItemInternalId ? { fabricItemInternalId } : {}),
+    ...(fabricSku ? { fabricSku } : {}),
     fabricName: text(value.fabric_name),
-    ...quantities,
+    ...(weltItemInternalId ? { weltItemInternalId } : {}),
+    ...(weltSku ? { weltSku } : {}),
+    weltName: text(value.welt_name),
+    ...(buttonItemInternalId ? { buttonItemInternalId } : {}),
+    ...(buttonSku ? { buttonSku } : {}),
+    buttonName: text(value.button_name),
+    quantity,
     ...(createdDate ? { createdDate } : {}),
     ...(dueDate ? { dueDate } : {}),
-    ...(workOrderStatus ? { workOrderStatus } : {})
+    ...(workOrderStatusCode ? { workOrderStatusCode } : {}),
+    ...(workOrderStatusLabel ? { workOrderStatusLabel } : {})
   }
 }
 

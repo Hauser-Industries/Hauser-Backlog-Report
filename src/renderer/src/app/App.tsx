@@ -9,25 +9,44 @@ import type {
   BacklogFilter,
   BacklogResponse,
   ConnectionStatus,
-  SalesOrderSearchRequest
+  InspectSalesOrderResult,
+  NetSuiteEnvironment,
+  ResolveCustomerIdsResult,
+  SalesOrderSearchRequest,
+  SuiteQlTestResult
 } from '@shared/types/backlog'
 import { formatDateTime } from '@shared/utils/date'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
+import { shouldLoadBacklogAtStartup } from '@shared/utils/startupMode'
 import { AlertIcon, RefreshIcon, SearchIcon, SlidersIcon } from '../components/icons'
 import { BacklogTable } from '../features/backlog/BacklogTable'
 import { ConnectionPanel } from '../features/connection/ConnectionPanel'
 
-type LoadingAction = 'initial' | 'filter' | 'search' | 'refresh' | 'connection' | null
+type LoadingAction =
+  | 'initial'
+  | 'filter'
+  | 'search'
+  | 'refresh'
+  | 'connection'
+  | 'suiteql'
+  | 'customer-resolution'
+  | 'sales-order-inspection'
+  | 'environment'
+  | null
 
 const INITIAL_CONNECTION: ConnectionStatus = {
-  dataSource: 'mock',
+  dataSource: 'live',
   configured: false,
   authenticated: false,
-  indicator: 'mock-data'
+  indicator: 'authentication-required'
 }
 
-function selectedCustomerFilter(selectedCustomer: string): BacklogFilter {
-  return selectedCustomer === ALL_CUSTOMERS_VALUE ? {} : { customerName: selectedCustomer }
+const SALES_ORDER_PAGE_SIZE = 50
+
+function selectedCustomerFilter(selectedCustomer: string, page = 0): BacklogFilter {
+  return selectedCustomer === ALL_CUSTOMERS_VALUE
+    ? { page, pageSize: SALES_ORDER_PAGE_SIZE }
+    : { customerName: selectedCustomer, page, pageSize: SALES_ORDER_PAGE_SIZE }
 }
 
 function searchRequest(
@@ -40,18 +59,25 @@ function searchRequest(
 }
 
 function connectionLabel(status: ConnectionStatus): string {
+  let label: string
   switch (status.indicator) {
     case 'mock-data':
-      return 'Mock Data'
+      label = 'Mock Data'
+      break
     case 'connected':
-      return 'NetSuite Connected'
+      label = 'NetSuite Connected'
+      break
     case 'disconnected':
-      return 'NetSuite Disconnected'
+      label = 'NetSuite Disconnected'
+      break
     case 'authentication-required':
-      return 'Authentication Required'
+      label = 'Authentication Required'
+      break
     case 'connection-error':
-      return 'Connection Error'
+      label = 'Connection Error'
+      break
   }
+  return status.environment ? `${status.environment.toUpperCase()} · ${label}` : label
 }
 
 function friendlyError(error: unknown): string {
@@ -87,6 +113,16 @@ export function App() {
   const [activeSalesOrder, setActiveSalesOrder] = useState<string | null>(null)
   const [response, setResponse] = useState<BacklogResponse | null>(null)
   const [connection, setConnection] = useState<ConnectionStatus>(INITIAL_CONNECTION)
+  const [suiteQlResult, setSuiteQlResult] = useState<SuiteQlTestResult | null>(null)
+  const [customerResolutionResult, setCustomerResolutionResult] =
+    useState<ResolveCustomerIdsResult | null>(null)
+  const [salesOrderInspectionInput, setSalesOrderInspectionInput] = useState('')
+  const [salesOrderInspectionValidation, setSalesOrderInspectionValidation] = useState<
+    string | null
+  >(null)
+  const [salesOrderInspectionResult, setSalesOrderInspectionResult] =
+    useState<InspectSalesOrderResult | null>(null)
+  const [connectionReady, setConnectionReady] = useState(false)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [loadingAction, setLoadingAction] = useState<LoadingAction>('initial')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -97,7 +133,15 @@ export function App() {
 
   const runReportRequest = useCallback(
     async (
-      action: Exclude<LoadingAction, 'connection' | null>,
+      action: Exclude<
+        LoadingAction,
+        | 'connection'
+        | 'suiteql'
+        | 'customer-resolution'
+        | 'sales-order-inspection'
+        | null
+        | 'environment'
+      >,
       request: () => Promise<BacklogResponse>
     ) => {
       const requestId = ++requestSequence.current
@@ -117,9 +161,9 @@ export function App() {
   )
 
   const loadBacklog = useCallback(
-    (action: 'initial' | 'filter' | 'refresh' = 'filter') =>
+    (action: 'initial' | 'filter' | 'refresh' = 'filter', page = 0) =>
       runReportRequest(action, () => {
-        const filter = selectedCustomerFilter(selectedCustomer)
+        const filter = selectedCustomerFilter(selectedCustomer, page)
         return action === 'refresh'
           ? window.hauserBacklog.refreshBacklog(filter)
           : window.hauserBacklog.getBacklog(filter)
@@ -131,11 +175,20 @@ export function App() {
     if (initialLoadStarted.current) return
     initialLoadStarted.current = true
 
-    void loadBacklog('initial')
     void window.hauserBacklog
       .getConnectionStatus()
-      .then(setConnection)
-      .catch((error: unknown) => setErrorMessage(friendlyError(error)))
+      .then((status) => {
+        setConnection(status)
+        setConnectionReady(true)
+        if (shouldLoadBacklogAtStartup(status)) return loadBacklog('initial')
+        setLoadingAction(null)
+        return undefined
+      })
+      .catch((error: unknown) => {
+        setConnectionReady(true)
+        setLoadingAction(null)
+        setErrorMessage(friendlyError(error))
+      })
     void window.hauserBacklog
       .getAppInfo()
       .then(setAppInfo)
@@ -182,24 +235,128 @@ export function App() {
     setSalesOrderInput('')
     setActiveSalesOrder(null)
     setSearchValidation(null)
-    void loadBacklog('filter')
+    void loadBacklog('filter', 0)
   }
 
   const handleRefresh = () => {
     if (activeSalesOrder) {
       void runReportRequest('refresh', () =>
-        window.hauserBacklog.searchSalesOrder(searchRequest(activeSalesOrder, selectedCustomer))
+        window.hauserBacklog.searchSalesOrder({
+          ...searchRequest(activeSalesOrder, selectedCustomer),
+          refreshDetails: true
+        })
       )
       return
     }
-    void loadBacklog('refresh')
+    void loadBacklog('refresh', response?.page ?? 0)
   }
 
   const runConnectionAction = async (action: () => Promise<ConnectionStatus>) => {
     setLoadingAction('connection')
     setErrorMessage(null)
+    setSuiteQlResult(null)
+    setCustomerResolutionResult(null)
+    setSalesOrderInspectionResult(null)
+    setSalesOrderInspectionValidation(null)
     try {
       setConnection(await action())
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const runConnectionTest = async () => {
+    setLoadingAction('connection')
+    setErrorMessage(null)
+    try {
+      const result = await window.hauserBacklog.testConnection()
+      setConnection(result.connectionStatus)
+      if (!result.ok) {
+        const statusPrefix =
+          result.error.httpStatus === null ? '' : `HTTP ${result.error.httpStatus}: `
+        setErrorMessage(`${statusPrefix}${result.error.message}`)
+      }
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const runSuiteQlTest = async () => {
+    setLoadingAction('suiteql')
+    setErrorMessage(null)
+    setSuiteQlResult(null)
+    try {
+      setSuiteQlResult(await window.hauserBacklog.testSuiteQl())
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const runCustomerIdResolution = async () => {
+    setLoadingAction('customer-resolution')
+    setErrorMessage(null)
+    setCustomerResolutionResult(null)
+    try {
+      setCustomerResolutionResult(await window.hauserBacklog.resolveCustomerIds())
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const handleSalesOrderInspectionInputChange = (value: string) => {
+    setSalesOrderInspectionInput(value)
+    setSalesOrderInspectionValidation(null)
+    setSalesOrderInspectionResult(null)
+  }
+
+  const runSalesOrderInspection = async () => {
+    setSalesOrderInspectionValidation(null)
+    setSalesOrderInspectionResult(null)
+
+    let normalized: string
+    try {
+      normalized = normalizeSalesOrderNumber(salesOrderInspectionInput)
+    } catch (error) {
+      setSalesOrderInspectionValidation(friendlyError(error))
+      return
+    }
+
+    setSalesOrderInspectionInput(normalized)
+    setLoadingAction('sales-order-inspection')
+    setErrorMessage(null)
+    try {
+      setSalesOrderInspectionResult(
+        await window.hauserBacklog.inspectSalesOrder({ salesOrderNumber: normalized })
+      )
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const switchNetSuiteEnvironment = async (environment: NetSuiteEnvironment) => {
+    if (environment === connection.environment) return
+
+    requestSequence.current += 1
+    setLoadingAction('environment')
+    setErrorMessage(null)
+    setSuiteQlResult(null)
+    setCustomerResolutionResult(null)
+    setSalesOrderInspectionResult(null)
+    setSalesOrderInspectionValidation(null)
+    setResponse(null)
+    setActiveSalesOrder(null)
+    try {
+      setConnection(await window.hauserBacklog.switchEnvironment({ environment }))
     } catch (error) {
       setErrorMessage(friendlyError(error))
     } finally {
@@ -219,7 +376,13 @@ export function App() {
       ? 'No backlog records were found.'
       : 'No backlog records were found for this customer.'
 
-  const reportBusy = loadingAction !== null && loadingAction !== 'connection'
+  const reportBusy =
+    loadingAction !== null &&
+    loadingAction !== 'connection' &&
+    loadingAction !== 'suiteql' &&
+    loadingAction !== 'customer-resolution' &&
+    loadingAction !== 'sales-order-inspection' &&
+    loadingAction !== 'environment'
 
   return (
     <div className="app-shell">
@@ -251,141 +414,185 @@ export function App() {
       </header>
 
       <main>
-        <section className="report-toolbar" aria-label="Report filters">
-          <label className="field customer-filter">
-            <span>Customer</span>
-            <select
-              value={selectedCustomer}
-              onChange={(event) => handleCustomerChange(event.target.value)}
-            >
-              <option value={ALL_CUSTOMERS_VALUE}>{ALL_CUSTOMERS_LABEL}</option>
-              {ALLOWED_CUSTOMERS.map((customer) => (
-                <option key={customer} value={customer}>
-                  {customer}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <form className="sales-order-search" onSubmit={handleSearch} noValidate>
-            <label className="field">
-              <span>Sales Order</span>
-              <div
-                className={
-                  searchValidation ? 'input-with-icon input-with-icon--error' : 'input-with-icon'
-                }
-              >
-                <SearchIcon />
-                <input
-                  value={salesOrderInput}
-                  onChange={(event) => {
-                    setSalesOrderInput(event.target.value)
-                    setSearchValidation(null)
-                  }}
-                  placeholder="Enter 1234 or SO1234"
-                  aria-invalid={Boolean(searchValidation)}
-                  aria-describedby={searchValidation ? 'sales-order-error' : undefined}
-                />
-              </div>
-            </label>
-            <button className="button button--primary" type="submit" disabled={reportBusy}>
-              Search
-            </button>
-            <button
-              className="button button--ghost"
-              type="button"
-              onClick={handleClearSearch}
-              disabled={reportBusy || (!activeSalesOrder && !salesOrderInput)}
-            >
-              Clear
-            </button>
-          </form>
-
-          <div className="refresh-area">
-            <p>
-              Last updated <strong>{formatDateTime(response?.lastUpdated)}</strong>
-            </p>
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={handleRefresh}
-              disabled={reportBusy}
-            >
-              <RefreshIcon className={loadingAction === 'refresh' ? 'spin' : undefined} />
-              {loadingAction === 'refresh' ? 'Refreshing…' : 'Refresh'}
-            </button>
-          </div>
-          {searchValidation ? (
-            <p className="field-error" id="sales-order-error">
-              {searchValidation}
-            </p>
-          ) : null}
-        </section>
-
-        {activeSalesOrder ? (
-          <div className="active-query">
-            Showing an exact Sales Order search for <strong>{activeSalesOrder}</strong>
-          </div>
-        ) : null}
-
-        {errorMessage ? (
-          <section className="message-state message-state--error" role="alert">
-            <AlertIcon />
-            <div>
-              <h2>We couldn’t load the report</h2>
-              <p>{errorMessage}</p>
-            </div>
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void loadBacklog('refresh')}
-            >
-              Try Again
-            </button>
-          </section>
-        ) : null}
-
-        <section className="report-section" aria-busy={reportBusy}>
-          <div className="report-section__heading">
-            <div>
-              <p className="eyebrow">Open sales order lines</p>
-              <h2>Backlog</h2>
-            </div>
-            <span>{response?.rows.length ?? 0} backlog rows</span>
-          </div>
-
-          {reportBusy && !response ? (
+        {!connectionReady ? (
+          <section className="authentication-stage" aria-live="polite">
             <div className="loading-state" role="status">
               <span className="loading-spinner" aria-hidden="true" />
               <div>
-                <strong>
-                  {loadingAction === 'search' ? 'Searching Sales Orders…' : 'Loading backlog…'}
-                </strong>
-                <span>Retrieving report rows and Work Order statuses.</span>
+                <strong>Checking NetSuite authentication…</strong>
+                <span>Loading the packaged public-client configuration.</span>
               </div>
             </div>
-          ) : outcomeMessage ? (
-            <div className="message-state message-state--empty">
-              <SearchIcon />
-              <p>{outcomeMessage}</p>
-            </div>
-          ) : response && response.rows.length === 0 ? (
-            <div className="message-state message-state--empty">
-              <p>{emptyMessage}</p>
-            </div>
-          ) : response ? (
-            <div className="table-with-progress">
-              {reportBusy ? (
-                <div className="loading-bar" role="progressbar" aria-label="Updating report" />
+          </section>
+        ) : (
+          <>
+            {connection.dataSource === 'live' && !connection.authenticated ? (
+              <section className="message-state message-state--empty report-authentication-notice">
+                <AlertIcon />
+                <div>
+                  <h2>Connect to NetSuite to load Production data</h2>
+                  <p>The report remains your home screen. Sign in from Connection when ready.</p>
+                </div>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  Connection
+                </button>
+              </section>
+            ) : null}
+            <section className="report-toolbar" aria-label="Report filters">
+              <label className="field customer-filter">
+                <span>Customer</span>
+                <select
+                  value={selectedCustomer}
+                  onChange={(event) => handleCustomerChange(event.target.value)}
+                >
+                  <option value={ALL_CUSTOMERS_VALUE}>{ALL_CUSTOMERS_LABEL}</option>
+                  {ALLOWED_CUSTOMERS.map((customer) => (
+                    <option key={customer} value={customer}>
+                      {customer}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <form className="sales-order-search" onSubmit={handleSearch} noValidate>
+                <label className="field">
+                  <span>Sales Order</span>
+                  <div
+                    className={
+                      searchValidation
+                        ? 'input-with-icon input-with-icon--error'
+                        : 'input-with-icon'
+                    }
+                  >
+                    <SearchIcon />
+                    <input
+                      value={salesOrderInput}
+                      onChange={(event) => {
+                        setSalesOrderInput(event.target.value)
+                        setSearchValidation(null)
+                      }}
+                      placeholder="Enter 1234 or SO1234"
+                      aria-invalid={Boolean(searchValidation)}
+                      aria-describedby={searchValidation ? 'sales-order-error' : undefined}
+                    />
+                  </div>
+                </label>
+                <button className="button button--primary" type="submit" disabled={reportBusy}>
+                  Search
+                </button>
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={handleClearSearch}
+                  disabled={reportBusy || (!activeSalesOrder && !salesOrderInput)}
+                >
+                  Clear
+                </button>
+              </form>
+
+              <div className="refresh-area">
+                <p>
+                  Last updated <strong>{formatDateTime(response?.lastUpdated)}</strong>
+                </p>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={reportBusy}
+                >
+                  <RefreshIcon className={loadingAction === 'refresh' ? 'spin' : undefined} />
+                  {loadingAction === 'refresh' ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
+              {searchValidation ? (
+                <p className="field-error" id="sales-order-error">
+                  {searchValidation}
+                </p>
               ) : null}
-              <BacklogTable rows={response.rows} />
-            </div>
-          ) : null}
-        </section>
+            </section>
+
+            {activeSalesOrder ? (
+              <div className="active-query">
+                Showing an exact Sales Order search for <strong>{activeSalesOrder}</strong>
+              </div>
+            ) : null}
+
+            {errorMessage ? (
+              <section className="message-state message-state--error" role="alert">
+                <AlertIcon />
+                <div>
+                  <h2>We couldn’t load the report</h2>
+                  <p>{errorMessage}</p>
+                </div>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  onClick={() => void loadBacklog('refresh', response?.page ?? 0)}
+                >
+                  Try Again
+                </button>
+              </section>
+            ) : null}
+
+            <section className="report-section" aria-busy={reportBusy}>
+              <div className="report-section__heading">
+                <div>
+                  <p className="eyebrow">Open sales order lines</p>
+                  <h2>Backlog</h2>
+                </div>
+                <span>{response?.totalSalesOrders ?? 0} Sales Orders</span>
+              </div>
+
+              {reportBusy && !response ? (
+                <div className="loading-state" role="status">
+                  <span className="loading-spinner" aria-hidden="true" />
+                  <div>
+                    <strong>
+                      {loadingAction === 'search' ? 'Searching Sales Orders…' : 'Loading backlog…'}
+                    </strong>
+                    <span>Retrieving Sales Order headers and basic item lines.</span>
+                  </div>
+                </div>
+              ) : outcomeMessage ? (
+                <div className="message-state message-state--empty">
+                  <SearchIcon />
+                  <p>{outcomeMessage}</p>
+                </div>
+              ) : response && response.salesOrders.length === 0 ? (
+                <div className="message-state message-state--empty">
+                  <p>{emptyMessage}</p>
+                </div>
+              ) : response ? (
+                <div className="table-with-progress">
+                  {reportBusy ? (
+                    <div className="loading-bar" role="progressbar" aria-label="Updating report" />
+                  ) : null}
+                  <BacklogTable
+                    key={response.lastUpdated}
+                    salesOrders={response.salesOrders}
+                    page={response.page}
+                    pageSize={response.pageSize}
+                    totalSalesOrders={response.totalSalesOrders}
+                    hasPrevious={response.hasPrevious}
+                    hasNext={response.hasNext}
+                    onPageChange={(page) => void loadBacklog('filter', page)}
+                    onLoadDetails={(salesOrderInternalId) =>
+                      window.hauserBacklog.getSalesOrderDetails({ salesOrderInternalId })
+                    }
+                  />
+                </div>
+              ) : null}
+            </section>
+          </>
+        )}
       </main>
 
       <footer className="status-footer">
-        <span>{response?.rows.length ?? 0} backlog rows</span>
+        <span>{response?.totalSalesOrders ?? 0} Sales Orders</span>
         <span>Last updated {formatDateTime(response?.lastUpdated)}</span>
         {appInfo ? <span>Version {appInfo.version}</span> : null}
         <span className="status-footer__readonly">Read-only report</span>
@@ -402,12 +609,24 @@ export function App() {
           <ConnectionPanel
             status={connection}
             busy={loadingAction === 'connection'}
+            suiteQlBusy={loadingAction === 'suiteql'}
+            suiteQlResult={suiteQlResult}
+            customerResolutionBusy={loadingAction === 'customer-resolution'}
+            customerResolutionResult={customerResolutionResult}
+            salesOrderInspectionInput={salesOrderInspectionInput}
+            salesOrderInspectionValidation={salesOrderInspectionValidation}
+            salesOrderInspectionBusy={loadingAction === 'sales-order-inspection'}
+            salesOrderInspectionResult={salesOrderInspectionResult}
+            environmentBusy={loadingAction === 'environment'}
             onClose={() => setSettingsOpen(false)}
             onSignIn={() => void runConnectionAction(() => window.hauserBacklog.signIn())}
             onSignOut={() => void runConnectionAction(() => window.hauserBacklog.signOut())}
-            onTestConnection={() =>
-              void runConnectionAction(() => window.hauserBacklog.testConnection())
-            }
+            onTestConnection={() => void runConnectionTest()}
+            onTestSuiteQl={() => void runSuiteQlTest()}
+            onResolveCustomerIds={() => void runCustomerIdResolution()}
+            onSalesOrderInspectionInputChange={handleSalesOrderInspectionInputChange}
+            onInspectSalesOrder={() => void runSalesOrderInspection()}
+            onEnvironmentChange={(environment) => void switchNetSuiteEnvironment(environment)}
           />
         </>
       ) : null}

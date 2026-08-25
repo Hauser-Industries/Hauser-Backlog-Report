@@ -5,7 +5,7 @@ import type { NetSuiteAuthProvider } from '../auth/authProvider'
 import type { NetSuiteConfig } from '../config/netsuiteConfig'
 import type { DiagnosticLogger } from '../diagnostics/sanitizedLogger'
 import type { NetSuiteEndpointCategory } from '../types/netsuiteTypes'
-import { netSuiteDiagnosticLogger } from '../diagnostics/sanitizedLogger'
+import { netSuiteDiagnosticLogger, sanitizeDiagnosticText } from '../diagnostics/sanitizedLogger'
 import { NetSuiteIntegrationError } from '../errors'
 
 const SUITEQL_PATH = '/services/rest/query/v1/suiteql'
@@ -43,7 +43,58 @@ interface InternalRequest<T> {
   schema: z.ZodType<T>
   body?: string
   headers?: Readonly<Record<string, string>>
+  expectedStatus?: number
   options?: NetSuiteRequestOptions
+}
+
+interface SanitizedNetSuiteErrorDetails {
+  code?: string
+  message?: string
+}
+
+const MAX_ERROR_CODE_LENGTH = 100
+const MAX_ERROR_MESSAGE_LENGTH = 500
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function sanitizedDiagnosticValue(
+  value: unknown,
+  maximumLength: number,
+  accessToken: string
+): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const sanitized = sanitizeDiagnosticText(value, maximumLength, [accessToken])
+  return sanitized || undefined
+}
+
+function parseSanitizedNetSuiteError(
+  payload: unknown,
+  accessToken: string
+): SanitizedNetSuiteErrorDetails {
+  const problem = recordValue(payload)
+  if (!problem) return {}
+
+  const rawDetails = problem['o:errorDetails']
+  const firstDetail = Array.isArray(rawDetails) ? recordValue(rawDetails[0]) : undefined
+  const code = sanitizedDiagnosticValue(
+    firstDetail?.['o:errorCode'] ?? problem['o:errorCode'] ?? problem.code,
+    MAX_ERROR_CODE_LENGTH,
+    accessToken
+  )
+  const message = sanitizedDiagnosticValue(
+    firstDetail?.detail ?? problem.detail ?? problem.message ?? problem.title,
+    MAX_ERROR_MESSAGE_LENGTH,
+    accessToken
+  )
+
+  return {
+    ...(code ? { code } : {}),
+    ...(message ? { message } : {})
+  }
 }
 
 export class NetSuiteHttpClient {
@@ -55,7 +106,7 @@ export class NetSuiteHttpClient {
   private readonly defaultTimeoutMs: number
 
   constructor(options: NetSuiteHttpClientOptions) {
-    this.baseUrl = new URL(options.config.accountDomain)
+    this.baseUrl = new URL(options.config.suiteTalkUrl)
     this.authProvider = options.authProvider
     this.fetchImplementation = options.fetchImplementation ?? fetch
     this.logger = options.logger ?? netSuiteDiagnosticLogger
@@ -74,7 +125,8 @@ export class NetSuiteHttpClient {
     limit: number,
     offset: number,
     schema: z.ZodType<T>,
-    options?: NetSuiteRequestOptions
+    options?: NetSuiteRequestOptions,
+    params?: readonly unknown[]
   ): Promise<T> {
     const search = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     return this.request({
@@ -82,8 +134,9 @@ export class NetSuiteHttpClient {
       relativePath: `${SUITEQL_PATH}?${search.toString()}`,
       endpointCategory: 'suiteql',
       schema,
-      body: JSON.stringify({ q: query }),
+      body: JSON.stringify(params === undefined ? { q: query } : { q: query, params }),
       headers: { Prefer: 'transient', 'Content-Type': 'application/json' },
+      expectedStatus: 200,
       ...(options ? { options } : {})
     })
   }
@@ -138,6 +191,7 @@ export class NetSuiteHttpClient {
         const requestInit: RequestInit = {
           method: request.method,
           headers,
+          redirect: 'error',
           signal: attemptController.signal
         }
         if (request.body !== undefined) requestInit.body = request.body
@@ -151,13 +205,19 @@ export class NetSuiteHttpClient {
           attempt
         })
 
-        if (response.ok) {
+        const statusAccepted =
+          request.expectedStatus === undefined
+            ? response.ok
+            : response.status === request.expectedStatus
+
+        if (statusAccepted) {
           let payload: unknown
           try {
             payload = await response.json()
           } catch (error) {
             throw new NetSuiteIntegrationError('NetSuite returned malformed JSON.', {
               code: 'response-validation',
+              status: response.status,
               cause: error
             })
           }
@@ -165,10 +225,20 @@ export class NetSuiteHttpClient {
           if (!parsed.success) {
             throw new NetSuiteIntegrationError('NetSuite returned an unexpected response shape.', {
               code: 'response-validation',
+              status: response.status,
               cause: parsed.error
             })
           }
           return parsed.data
+        }
+
+        let errorDetails: SanitizedNetSuiteErrorDetails = {}
+        if (response.status === 400 || response.status >= 500) {
+          try {
+            errorDetails = parseSanitizedNetSuiteError(await response.json(), accessToken)
+          } catch {
+            // A malformed error body is intentionally discarded rather than crossing trust boundaries.
+          }
         }
 
         if (response.status === 401) {
@@ -209,7 +279,9 @@ export class NetSuiteHttpClient {
         throw new NetSuiteIntegrationError('NetSuite rejected the read-only request.', {
           code: 'api-error',
           status: response.status,
-          retryable: response.status >= 500
+          retryable: response.status >= 500,
+          ...(errorDetails.code ? { netSuiteErrorCode: errorDetails.code } : {}),
+          ...(errorDetails.message ? { netSuiteErrorMessage: errorDetails.message } : {})
         })
       } catch (error) {
         if (error instanceof NetSuiteIntegrationError) throw error
