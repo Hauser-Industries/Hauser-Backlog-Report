@@ -80,12 +80,7 @@ describe('BacklogTable grouped report contract', () => {
 
   it('renders Sales Order-level paging controls', () => {
     const markup = renderToStaticMarkup(
-      <BacklogTable
-        salesOrders={[salesOrder]}
-        {...sharedProps}
-        totalSalesOrders={75}
-        hasNext
-      />
+      <BacklogTable salesOrders={[salesOrder]} {...sharedProps} totalSalesOrders={75} hasNext />
     )
 
     expect(markup).toContain('Showing Sales Orders 1–50 of 75')

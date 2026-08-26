@@ -1,9 +1,6 @@
 import { z } from 'zod'
 
-import type {
-  SalesOrderDetailsResult,
-  SalesOrderItemDetail
-} from '@shared/types/backlog'
+import type { SalesOrderDetailsResult, SalesOrderItemDetail } from '@shared/types/backlog'
 import type { NetSuiteHttpClient } from '../client/netsuiteHttpClient'
 import type { SuiteQlClient } from '../client/suiteQlClient'
 import type { DiagnosticLogger } from '../diagnostics/sanitizedLogger'
@@ -140,9 +137,7 @@ export class NetSuiteSalesOrderDetailProvider {
         return pending ? [pending] : []
       })
       const itemIds = pendingItems.flatMap(({ replacements }) =>
-        Object.values(replacements).flatMap((reference) =>
-          reference?.id ? [reference.id] : []
-        )
+        Object.values(replacements).flatMap((reference) => (reference?.id ? [reference.id] : []))
       )
       const replacementItems = await this.lookupReplacementItems(itemIds)
       const items = pendingItems.map((pending) =>

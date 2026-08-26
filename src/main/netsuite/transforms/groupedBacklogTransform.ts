@@ -20,30 +20,32 @@ function normalizeSuiteQlAliasCasing(value: unknown): unknown {
 
 const salesOrderHeaderSchema = z.preprocess(
   normalizeSuiteQlAliasCasing,
-  z.object({
-    sales_order_internal_id: scalar,
-    sales_order_number: scalar,
-    customer_internal_id: scalar,
-    customer_name: scalar,
-    po_number: scalar.optional(),
-    created_date: scalar.optional(),
-    due_date: scalar.optional()
-  })
-  .passthrough()
+  z
+    .object({
+      sales_order_internal_id: scalar,
+      sales_order_number: scalar,
+      customer_internal_id: scalar,
+      customer_name: scalar,
+      po_number: scalar.optional(),
+      created_date: scalar.optional(),
+      due_date: scalar.optional()
+    })
+    .passthrough()
 )
 
 const salesOrderLineSchema = z.preprocess(
   normalizeSuiteQlAliasCasing,
-  z.object({
-    sales_order_internal_id: scalar,
-    line_id: scalar,
-    line_sequence: scalar.optional(),
-    item_internal_id: scalar,
-    item: scalar,
-    item_description: scalar.optional(),
-    quantity_api_value: scalar.optional()
-  })
-  .passthrough()
+  z
+    .object({
+      sales_order_internal_id: scalar,
+      line_id: scalar,
+      line_sequence: scalar.optional(),
+      item_internal_id: scalar,
+      item: scalar,
+      item_description: scalar.optional(),
+      quantity_api_value: scalar.optional()
+    })
+    .passthrough()
 )
 
 function text(value: string | number | null | undefined): string {
@@ -106,10 +108,7 @@ export function transformSalesOrderLine(
   }
 
   const value = parsed.data
-  const salesOrderInternalId = requiredText(
-    value.sales_order_internal_id,
-    'line transaction ID'
-  )
+  const salesOrderInternalId = requiredText(value.sales_order_internal_id, 'line transaction ID')
   const lineId = requiredText(value.line_id, 'line ID')
   const itemInternalId = requiredText(value.item_internal_id, 'item internal ID')
 

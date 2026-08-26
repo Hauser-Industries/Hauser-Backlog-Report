@@ -166,6 +166,35 @@ describe('NetSuiteConnectionAdapter', () => {
     expect(restProbe.calls).toBe(0)
   })
 
+  it('requires an approved launch authorization before production report access is allowed', async () => {
+    const authProvider = new FakeAuthProvider()
+    authProvider.authenticated = true
+    const adapter = new NetSuiteConnectionAdapter(
+      authProvider,
+      { ...PACKAGED_NETSUITE_CONFIG },
+      new FakeRestConnectionProbe(),
+      new FakeSuiteQlProbe(),
+      new FakeCustomerIdResolutionProbe(),
+      new FakeSalesOrderInspectionProbe(),
+      { requireStartupAuthorization: true, requiredRoleName: 'Hauser Backlog Report API' }
+    )
+
+    await expect(() => adapter.assertReportAccessAuthorized()).toThrow('Hauser Backlog Report API')
+    expect(await adapter.getStatus()).toMatchObject({
+      authenticated: true,
+      indicator: 'authentication-required',
+      startupAuthorization: 'required'
+    })
+
+    await adapter.handleOAuthCallback('hauser-backlog://oauth/callback?code=redacted')
+
+    expect(() => adapter.assertReportAccessAuthorized()).not.toThrow()
+    expect(await adapter.getStatus()).toMatchObject({
+      indicator: 'connected',
+      startupAuthorization: 'approved'
+    })
+  })
+
   it('marks the connection successful only after the REST probe returns HTTP 200', async () => {
     const authProvider = new FakeAuthProvider()
     authProvider.authenticated = true

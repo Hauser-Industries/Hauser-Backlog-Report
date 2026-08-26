@@ -1,9 +1,5 @@
 import type { WorkOrderRecord } from '../../src/main/data/workOrderRecord'
-import type {
-  BacklogPageData,
-  BacklogRow,
-  SalesOrderGroup
-} from '../../src/shared/types/backlog'
+import type { BacklogPageData, BacklogRow, SalesOrderGroup } from '../../src/shared/types/backlog'
 
 export function makeBacklogRow(overrides: Partial<BacklogRow> = {}): BacklogRow {
   return {
@@ -39,9 +35,7 @@ export function makeBacklogRow(overrides: Partial<BacklogRow> = {}): BacklogRow 
   }
 }
 
-export function makeSalesOrderGroup(
-  overrides: Partial<SalesOrderGroup> = {}
-): SalesOrderGroup {
+export function makeSalesOrderGroup(overrides: Partial<SalesOrderGroup> = {}): SalesOrderGroup {
   const row = makeBacklogRow()
   return {
     salesOrderInternalId: row.salesOrderInternalId ?? '1',
@@ -60,9 +54,7 @@ export function makeSalesOrderGroup(
         item: row.item,
         itemDescription: row.itemDescription,
         quantity: row.quantity,
-        ...(row.workOrderInternalId
-          ? { workOrderInternalId: row.workOrderInternalId }
-          : {}),
+        ...(row.workOrderInternalId ? { workOrderInternalId: row.workOrderInternalId } : {}),
         ...(row.workOrderNumber ? { workOrderNumber: row.workOrderNumber } : {}),
         ...(row.paintName ? { paintName: row.paintName } : {}),
         ...(row.fabricName ? { fabricName: row.fabricName } : {}),

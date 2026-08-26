@@ -25,6 +25,7 @@ function render(
     customerResolutionBusy?: boolean
     customerResolutionResult?: ResolveCustomerIdsResult | null
     errorMessage?: string | null
+    startupGate?: boolean
   } = {}
 ): string {
   return renderToStaticMarkup(
@@ -41,6 +42,7 @@ function render(
       salesOrderInspectionResult={null}
       environmentBusy={false}
       errorMessage={options.errorMessage ?? null}
+      {...(options.startupGate === undefined ? {} : { startupGate: options.startupGate })}
       onSignIn={() => undefined}
       onSignOut={() => undefined}
       onTestConnection={() => undefined}
@@ -159,5 +161,28 @@ describe('AuthenticationStage', () => {
     expect(markup).toContain('Testing SuiteQL')
     expect(markup.match(/disabled=""/g)).toHaveLength(7)
     expect(markup).toContain('Test Connection')
+  })
+
+  it('keeps an existing token behind the launch authorization gate after a denial', () => {
+    const markup = render(
+      {
+        dataSource: 'live',
+        environment: 'production',
+        configured: true,
+        authenticated: true,
+        indicator: 'authentication-required',
+        startupAuthorization: 'denied',
+        accountLabel: '3850367',
+        configuration,
+        message:
+          'NetSuite authorization was denied. The report remains locked until you approve access.'
+      },
+      { startupGate: true }
+    )
+
+    expect(markup).toContain('Authorization Denied')
+    expect(markup).toContain('Sign in to NetSuite')
+    expect(markup).toContain('Hauser Backlog Report API')
+    expect(markup).not.toContain('Test Connection')
   })
 })

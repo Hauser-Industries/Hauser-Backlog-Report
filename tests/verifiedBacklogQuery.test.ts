@@ -46,8 +46,6 @@ describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
   })
 
   it('rejects unsafe Sales Order text before query construction', () => {
-    expect(() => factory.createSalesOrderQuery("SO10'144")).toThrow(
-      InvalidSalesOrderNumberError
-    )
+    expect(() => factory.createSalesOrderQuery("SO10'144")).toThrow(InvalidSalesOrderNumberError)
   })
 })

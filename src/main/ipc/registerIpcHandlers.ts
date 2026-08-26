@@ -66,17 +66,18 @@ const salesOrderSearchSchema = z
     customerName: customerNameSchema.optional(),
     refreshDetails: z.boolean().optional()
   })
-  .transform<SalesOrderSearchRequest>(
-    ({ salesOrderNumber, customerName, refreshDetails }) => ({
-      salesOrderNumber,
-      ...(customerName ? { customerName } : {}),
-      ...(refreshDetails !== undefined ? { refreshDetails } : {})
-    })
-  )
+  .transform<SalesOrderSearchRequest>(({ salesOrderNumber, customerName, refreshDetails }) => ({
+    salesOrderNumber,
+    ...(customerName ? { customerName } : {}),
+    ...(refreshDetails !== undefined ? { refreshDetails } : {})
+  }))
 
 const salesOrderDetailsSchema = z
   .strictObject({
-    salesOrderInternalId: z.string().trim().regex(/^[0-9]+$/)
+    salesOrderInternalId: z
+      .string()
+      .trim()
+      .regex(/^[0-9]+$/)
   })
   .transform<SalesOrderDetailsRequest>(({ salesOrderInternalId }) => ({
     salesOrderInternalId
@@ -135,10 +136,8 @@ export function registerIpcHandlers({ backlog, connection }: IpcDependencies): v
   registerValidatedHandler(IPC_CHANNELS.refreshBacklog, backlogFilterSchema, (filter) =>
     backlog.refreshBacklog(filter)
   )
-  registerValidatedHandler(
-    IPC_CHANNELS.getSalesOrderDetails,
-    salesOrderDetailsSchema,
-    (request) => backlog.getSalesOrderDetails(request.salesOrderInternalId)
+  registerValidatedHandler(IPC_CHANNELS.getSalesOrderDetails, salesOrderDetailsSchema, (request) =>
+    backlog.getSalesOrderDetails(request.salesOrderInternalId)
   )
 
   registerNoArgumentHandler(IPC_CHANNELS.getConnectionStatus, () => connection.getStatus())

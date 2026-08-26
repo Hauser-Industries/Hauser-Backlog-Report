@@ -29,8 +29,7 @@ interface DetailState {
 }
 
 const COLUMN_WIDTHS = [
-  260, 125, 115, 130, 230, 125, 100, 125, 180, 130, 190, 125, 180, 125, 180, 120,
-  120, 165
+  260, 125, 115, 130, 230, 125, 100, 125, 180, 130, 190, 125, 180, 125, 180, 120, 120, 165
 ] as const
 
 const HEADERS = [
@@ -80,10 +79,7 @@ function itemDetail(
   )
 }
 
-function mergeItem(
-  item: BacklogItemRow,
-  details: readonly SalesOrderItemDetail[]
-): BacklogItemRow {
+function mergeItem(item: BacklogItemRow, details: readonly SalesOrderItemDetail[]): BacklogItemRow {
   const detail = itemDetail(item, details)
   return detail ? { ...item, ...detail } : item
 }
@@ -98,9 +94,7 @@ export function BacklogTable({
   onPageChange,
   onLoadDetails
 }: BacklogTableProps) {
-  const [expandedSalesOrders, setExpandedSalesOrders] = useState<Set<string>>(
-    () => new Set()
-  )
+  const [expandedSalesOrders, setExpandedSalesOrders] = useState<Set<string>>(() => new Set())
   const [detailBySalesOrder, setDetailBySalesOrder] = useState<Record<string, DetailState>>({})
 
   const toggleSalesOrder = (salesOrder: SalesOrderGroup): void => {
@@ -252,9 +246,7 @@ export function BacklogTable({
                             <td>{displayDate(salesOrder.dueDate)}</td>
                             <td>
                               {displayWorkOrderStatus(item.workOrderStatus) ? (
-                                <StatusBadge
-                                  label={displayWorkOrderStatus(item.workOrderStatus)}
-                                />
+                                <StatusBadge label={displayWorkOrderStatus(item.workOrderStatus)} />
                               ) : null}
                             </td>
                           </tr>

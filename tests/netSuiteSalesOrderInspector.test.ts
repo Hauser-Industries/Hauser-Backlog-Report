@@ -227,9 +227,7 @@ describe('NetSuiteSalesOrderInspector', () => {
   it('returns the known-good header and line values without secondary requests', async () => {
     const client = new FakeSuiteQlClient()
     client.response = {
-      items: [
-        row()
-      ],
+      items: [row()],
       totalResults: 1,
       pages: 1
     }
@@ -310,9 +308,10 @@ describe('NetSuiteSalesOrderInspector', () => {
   it('accepts case-insensitive SuiteQL aliases and preserves null raw fields', async () => {
     const client = new FakeSuiteQlClient()
     const uppercaseAliases = Object.fromEntries(
-      Object.entries(
-        row({ quantity_api_value: '2' })
-      ).map(([key, value]) => [key.toUpperCase(), value])
+      Object.entries(row({ quantity_api_value: '2' })).map(([key, value]) => [
+        key.toUpperCase(),
+        value
+      ])
     )
     client.response = { items: [uppercaseAliases], totalResults: 1, pages: 1 }
 

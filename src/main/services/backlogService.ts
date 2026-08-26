@@ -47,9 +47,7 @@ export class BacklogService {
     }
 
     const filteredSalesOrders = request.customerName
-      ? allowedSalesOrders.filter(
-          (salesOrder) => salesOrder.customerName === request.customerName
-        )
+      ? allowedSalesOrders.filter((salesOrder) => salesOrder.customerName === request.customerName)
       : allowedSalesOrders
 
     return filteredSalesOrders.length > 0
@@ -82,10 +80,7 @@ export class BacklogService {
     )
   }
 
-  private response(
-    page: BacklogPageData,
-    outcome: BacklogResponse['outcome']
-  ): BacklogResponse {
+  private response(page: BacklogPageData, outcome: BacklogResponse['outcome']): BacklogResponse {
     const salesOrders = this.allowedSalesOrders(page.salesOrders)
     return {
       ...page,

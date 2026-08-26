@@ -26,6 +26,7 @@ interface AuthenticationStageProps {
   salesOrderInspectionResult: InspectSalesOrderResult | null
   environmentBusy: boolean
   errorMessage: string | null
+  startupGate?: boolean
   onSignIn: () => void
   onSignOut: () => void
   onTestConnection: () => void
@@ -37,6 +38,10 @@ interface AuthenticationStageProps {
 }
 
 function authenticationHeading(status: ConnectionStatus): string {
+  if (status.startupAuthorization === 'pending') return 'Complete NetSuite Sign-in'
+  if (status.startupAuthorization === 'denied') return 'Authorization Denied'
+  if (status.startupAuthorization === 'failed') return 'Authorization Not Completed'
+  if (status.startupAuthorization === 'required') return 'Authentication Required'
   if (status.indicator === 'connected') return 'NetSuite Connected'
   if (status.indicator === 'connection-error') return 'NetSuite Connection Error'
   if (status.authenticated) return 'NetSuite Authenticated'
@@ -56,6 +61,7 @@ export function AuthenticationStage({
   salesOrderInspectionResult,
   environmentBusy,
   errorMessage,
+  startupGate = false,
   onSignIn,
   onSignOut,
   onTestConnection,
@@ -65,7 +71,12 @@ export function AuthenticationStage({
   onInspectSalesOrder,
   onEnvironmentChange
 }: AuthenticationStageProps) {
-  const connected = status.indicator === 'connected'
+  const startupAuthorizationNeeded =
+    startupGate &&
+    status.startupAuthorization !== 'approved' &&
+    status.startupAuthorization !== 'not-required'
+  const usableConnection = status.authenticated && !startupAuthorizationNeeded
+  const connected = usableConnection && status.indicator === 'connected'
   const controlsBusy =
     busy || suiteQlBusy || customerResolutionBusy || salesOrderInspectionBusy || environmentBusy
 
@@ -76,7 +87,7 @@ export function AuthenticationStage({
           className={`authentication-card__status authentication-card__status--${status.indicator}`}
         >
           <span aria-hidden="true" />
-          {connected ? 'Connected' : status.authenticated ? 'Authenticated' : 'Sign-in required'}
+          {connected ? 'Connected' : usableConnection ? 'Authenticated' : 'Sign-in required'}
         </div>
 
         <p className="eyebrow">NetSuite</p>
@@ -89,7 +100,7 @@ export function AuthenticationStage({
           environment={status.environment ?? 'sandbox'}
           controlId="authentication-netsuite-environment"
           busy={environmentBusy}
-          disabled={!status.configured || (controlsBusy && !environmentBusy)}
+          disabled={startupGate || !status.configured || (controlsBusy && !environmentBusy)}
           onChange={onEnvironmentChange}
         />
 
@@ -100,7 +111,7 @@ export function AuthenticationStage({
           </div>
         ) : null}
 
-        {!status.authenticated ? (
+        {!usableConnection ? (
           <p className="authentication-card__role">
             If NetSuite asks you to select a role, choose <strong>Hauser Backlog Report API</strong>
             .
@@ -112,14 +123,18 @@ export function AuthenticationStage({
         ) : null}
 
         <div className="authentication-card__actions">
-          {!status.authenticated ? (
+          {!usableConnection ? (
             <button
               className="button button--primary"
               type="button"
               onClick={onSignIn}
               disabled={controlsBusy}
             >
-              {busy ? 'Opening NetSuite…' : 'Sign in to NetSuite'}
+              {busy
+                ? 'Opening NetSuite…'
+                : status.startupAuthorization === 'pending'
+                  ? 'Open NetSuite Again'
+                  : 'Sign in to NetSuite'}
             </button>
           ) : (
             <>
@@ -159,7 +174,7 @@ export function AuthenticationStage({
           )}
         </div>
 
-        {status.authenticated ? (
+        {usableConnection ? (
           <SalesOrderInspectionControls
             controlId="authentication-sales-order-inspection"
             value={salesOrderInspectionInput}

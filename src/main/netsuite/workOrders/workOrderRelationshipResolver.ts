@@ -15,10 +15,7 @@ export interface WorkOrderSummary {
   status?: string
 }
 
-export type WorkOrderRelationship =
-  | 'NextTransactionLineLink'
-  | 'WOLine.CreatedFrom'
-  | 'none'
+export type WorkOrderRelationship = 'NextTransactionLineLink' | 'WOLine.CreatedFrom' | 'none'
 
 export interface WorkOrderResolution {
   succeeded: boolean
@@ -194,10 +191,7 @@ export class NetSuiteWorkOrderRelationshipResolver implements WorkOrderRelations
       )
       if (result.items.length > 0) {
         const resolution = this.fromExactRelationships(result.items, salesOrders)
-        if (
-          resolution.bySalesOrderLine.size > 0 ||
-          resolution.ambiguousLineKeys.size > 0
-        ) {
+        if (resolution.bySalesOrderLine.size > 0 || resolution.ambiguousLineKeys.size > 0) {
           this.logger.info('Work Order relationship resolution completed.', {
             endpointCategory: 'work-order-lookup',
             relationship: resolution.relationship,
@@ -245,9 +239,7 @@ export class NetSuiteWorkOrderRelationshipResolver implements WorkOrderRelations
   ): WorkOrderResolution {
     const currentLineKeys = new Set(
       salesOrders.flatMap((salesOrder) =>
-        salesOrder.items.map(
-          (item) => `${salesOrder.salesOrderInternalId}:${item.lineId}`
-        )
+        salesOrder.items.map((item) => `${salesOrder.salesOrderInternalId}:${item.lineId}`)
       )
     )
     const candidates = new Map<string, WorkOrderSummary[]>()

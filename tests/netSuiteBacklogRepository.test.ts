@@ -51,9 +51,7 @@ describe('NetSuiteBacklogRepository two-stage paging', () => {
     const suiteQlClient = { executeSuiteQL, queryAll } as unknown as SuiteQlClient
     const repository = new NetSuiteBacklogRepository(
       suiteQlClient,
-      new VerifiedBacklogQueryFactory(
-        getNetSuiteEnvironmentProfileByEnvironment('production')
-      ),
+      new VerifiedBacklogQueryFactory(getNetSuiteEnvironmentProfileByEnvironment('production')),
       { verified: true, orderedSign: 'invert' }
     )
 
@@ -113,9 +111,7 @@ describe('NetSuiteBacklogRepository two-stage paging', () => {
     } as unknown as SuiteQlClient
     const repository = new NetSuiteBacklogRepository(
       suiteQlClient,
-      new VerifiedBacklogQueryFactory(
-        getNetSuiteEnvironmentProfileByEnvironment('production')
-      ),
+      new VerifiedBacklogQueryFactory(getNetSuiteEnvironmentProfileByEnvironment('production')),
       { verified: true, orderedSign: 'invert' },
       {
         resolve: vi.fn(async () => {
@@ -166,9 +162,7 @@ describe('NetSuiteBacklogRepository two-stage paging', () => {
     } as unknown as SuiteQlClient
     const repository = new NetSuiteBacklogRepository(
       suiteQlClient,
-      new VerifiedBacklogQueryFactory(
-        getNetSuiteEnvironmentProfileByEnvironment('production')
-      ),
+      new VerifiedBacklogQueryFactory(getNetSuiteEnvironmentProfileByEnvironment('production')),
       { verified: true, orderedSign: 'invert' },
       {
         resolve: vi.fn(async () => ({

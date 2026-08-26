@@ -12,6 +12,11 @@ export interface ConfiguredNetSuiteCustomer {
 export interface NetSuiteEnvironmentProfile extends NetSuiteConfig {
   environment: NetSuiteEnvironment
   customers: readonly ConfiguredNetSuiteCustomer[]
+  requiredOAuthRole?: Readonly<{
+    internalId: string
+    scriptId: string
+    name: string
+  }>
 }
 
 const SB1_CUSTOMERS: readonly ConfiguredNetSuiteCustomer[] = Object.freeze([
@@ -49,6 +54,11 @@ export const NETSUITE_ENVIRONMENT_PROFILES: readonly NetSuiteEnvironmentProfile[
     redirectUri: NETSUITE_REDIRECT_URI,
     scope: NETSUITE_SCOPE,
     environment: 'production',
+    requiredOAuthRole: {
+      internalId: '1990',
+      scriptId: 'customrole1990',
+      name: 'Hauser Backlog Report API'
+    },
     customers: PRODUCTION_CUSTOMERS
   }
 ])

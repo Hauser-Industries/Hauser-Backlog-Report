@@ -17,9 +17,14 @@ import type {
 } from '@shared/types/backlog'
 import { formatDateTime } from '@shared/utils/date'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
-import { shouldLoadBacklogAtStartup } from '@shared/utils/startupMode'
+import {
+  requiresStartupAuthorization,
+  shouldBeginStartupAuthorization,
+  shouldLoadBacklogAtStartup
+} from '@shared/utils/startupMode'
 import { AlertIcon, RefreshIcon, SearchIcon, SlidersIcon } from '../components/icons'
 import { BacklogTable } from '../features/backlog/BacklogTable'
+import { AuthenticationStage } from '../features/connection/AuthenticationStage'
 import { ConnectionPanel } from '../features/connection/ConnectionPanel'
 
 type LoadingAction =
@@ -171,6 +176,18 @@ export function App() {
     [runReportRequest, selectedCustomer]
   )
 
+  const beginStartupAuthorization = useCallback(async () => {
+    setLoadingAction('connection')
+    setErrorMessage(null)
+    try {
+      setConnection(await window.hauserBacklog.signIn())
+    } catch (error) {
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setLoadingAction(null)
+    }
+  }, [])
+
   useEffect(() => {
     if (initialLoadStarted.current) return
     initialLoadStarted.current = true
@@ -180,6 +197,10 @@ export function App() {
       .then((status) => {
         setConnection(status)
         setConnectionReady(true)
+        if (shouldBeginStartupAuthorization(status)) {
+          void beginStartupAuthorization()
+          return undefined
+        }
         if (shouldLoadBacklogAtStartup(status)) return loadBacklog('initial')
         setLoadingAction(null)
         return undefined
@@ -193,7 +214,7 @@ export function App() {
       .getAppInfo()
       .then(setAppInfo)
       .catch(() => undefined)
-  }, [loadBacklog])
+  }, [beginStartupAuthorization, loadBacklog])
 
   const handleCustomerChange = (value: string) => {
     requestSequence.current += 1
@@ -383,6 +404,7 @@ export function App() {
     loadingAction !== 'customer-resolution' &&
     loadingAction !== 'sales-order-inspection' &&
     loadingAction !== 'environment'
+  const startupGateActive = requiresStartupAuthorization(connection)
 
   return (
     <div className="app-shell">
@@ -406,6 +428,7 @@ export function App() {
             type="button"
             onClick={() => setSettingsOpen((open) => !open)}
             aria-expanded={settingsOpen}
+            disabled={startupGateActive}
           >
             <SlidersIcon />
             Connection
@@ -424,6 +447,30 @@ export function App() {
               </div>
             </div>
           </section>
+        ) : startupGateActive ? (
+          <AuthenticationStage
+            status={connection}
+            busy={loadingAction === 'connection'}
+            suiteQlBusy={false}
+            suiteQlResult={null}
+            customerResolutionBusy={false}
+            customerResolutionResult={null}
+            salesOrderInspectionInput=""
+            salesOrderInspectionValidation={null}
+            salesOrderInspectionBusy={false}
+            salesOrderInspectionResult={null}
+            environmentBusy={false}
+            errorMessage={errorMessage}
+            startupGate
+            onSignIn={() => void beginStartupAuthorization()}
+            onSignOut={() => undefined}
+            onTestConnection={() => undefined}
+            onTestSuiteQl={() => undefined}
+            onResolveCustomerIds={() => undefined}
+            onSalesOrderInspectionInputChange={() => undefined}
+            onInspectSalesOrder={() => undefined}
+            onEnvironmentChange={() => undefined}
+          />
         ) : (
           <>
             {connection.dataSource === 'live' && !connection.authenticated ? (

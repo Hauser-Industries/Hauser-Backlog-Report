@@ -1,8 +1,4 @@
-import type {
-  BacklogFilter,
-  BacklogPageData,
-  SalesOrderDetailsResult
-} from '@shared/types/backlog'
+import type { BacklogFilter, BacklogPageData, SalesOrderDetailsResult } from '@shared/types/backlog'
 
 /**
  * Main-process boundary used by both mock data and the future NetSuite adapter.

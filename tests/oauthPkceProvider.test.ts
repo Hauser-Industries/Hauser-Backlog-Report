@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { OAuthPkceProvider } from '../src/main/netsuite/auth/oauthPkceProvider'
+import type { OAuthAuthorizationIdentity } from '../src/main/netsuite/auth/oauthPkceProvider'
 import {
   createNetSuiteOAuthEndpoints,
   PACKAGED_NETSUITE_CONFIG
@@ -55,6 +56,8 @@ function createProvider(options: {
   tokenStore: MemoryRefreshTokenStore
   fetchImplementation: typeof fetch
   openedUrls?: string[]
+  forceInteractiveAuthorization?: boolean
+  validateAuthorization?: (identity: OAuthAuthorizationIdentity) => void
 }) {
   return new OAuthPkceProvider({
     config: { ...PACKAGED_NETSUITE_CONFIG },
@@ -66,6 +69,12 @@ function createProvider(options: {
       }
     },
     fetchImplementation: options.fetchImplementation,
+    ...(options.forceInteractiveAuthorization === undefined
+      ? {}
+      : { forceInteractiveAuthorization: options.forceInteractiveAuthorization }),
+    ...(options.validateAuthorization === undefined
+      ? {}
+      : { validateAuthorization: options.validateAuthorization }),
     logger: {
       debug: () => undefined,
       info: () => undefined,
@@ -246,5 +255,42 @@ describe('OAuthPkceProvider', () => {
     await expect(
       provider.handleOAuthCallback(`hauser-backlog://oauth/callback?code=old-code&state=${state}`)
     ).rejects.toThrow('No NetSuite sign-in attempt is waiting for a callback')
+  })
+
+  it('forces an interactive login and rejects a callback before token exchange when its role is invalid', async () => {
+    const openedUrls: string[] = []
+    const tokenStore = new MemoryRefreshTokenStore('existing-encrypted-token')
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      successfulTokenResponse('access', 'replacement-refresh')
+    )
+    const provider = createProvider({
+      tokenStore,
+      fetchImplementation,
+      openedUrls,
+      forceInteractiveAuthorization: true,
+      validateAuthorization: ({ companyId, roleId, entityId }) => {
+        expect({ companyId, roleId, entityId }).toEqual({
+          companyId: '3850367',
+          roleId: '3',
+          entityId: '12'
+        })
+        throw new Error('The selected NetSuite role is not authorized.')
+      }
+    })
+
+    await provider.signIn()
+    const authorizationUrl = new URL(openedUrls[0]!)
+    expect(authorizationUrl.searchParams.get('prompt')).toBe('login consent')
+
+    await expect(
+      provider.handleOAuthCallback(
+        `hauser-backlog://oauth/callback?code=one-time-code&state=${encodeURIComponent(
+          authorizationUrl.searchParams.get('state')!
+        )}&company=3850367&role=3&entity=12`
+      )
+    ).rejects.toThrow('selected NetSuite role is not authorized')
+
+    expect(fetchImplementation).not.toHaveBeenCalled()
+    expect(tokenStore.value).toBe('existing-encrypted-token')
   })
 })

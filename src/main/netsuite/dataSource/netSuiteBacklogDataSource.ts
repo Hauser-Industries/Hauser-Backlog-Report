@@ -1,8 +1,4 @@
-import type {
-  BacklogFilter,
-  BacklogPageData,
-  SalesOrderDetailsResult
-} from '@shared/types/backlog'
+import type { BacklogFilter, BacklogPageData, SalesOrderDetailsResult } from '@shared/types/backlog'
 import type { BacklogDataSource } from '../../data/backlogDataSource'
 import type { SuiteQlOptions } from '../client/suiteQlClient'
 import type { BacklogRepository } from '../repositories/backlogRepository'

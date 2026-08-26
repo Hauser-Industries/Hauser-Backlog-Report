@@ -7,6 +7,7 @@ import { MockBacklogDataSource } from './data/mock/mockBacklogDataSource'
 import { PendingLiveBacklogDataSource } from './data/pendingLiveBacklogDataSource'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { OAuthPkceProvider } from './netsuite/auth/oauthPkceProvider'
+import { validateOAuthAuthorizationIdentity } from './netsuite/auth/oauthAuthorizationValidator'
 import { NetSuiteHttpClient } from './netsuite/client/netsuiteHttpClient'
 import { SuiteQlClient } from './netsuite/client/suiteQlClient'
 import { NetSuiteConnectionAdapter } from './netsuite/connection/netSuiteConnectionAdapter'
@@ -66,11 +67,9 @@ function createBacklogDataSource(
   configState: NetSuiteConfigState,
   liveDataSource?: BacklogDataSource
 ): BacklogDataSource {
-  return (
-    mode === 'mock'
-      ? new MockBacklogDataSource()
-      : (liveDataSource ?? new PendingLiveBacklogDataSource(configState))
-  )
+  return mode === 'mock'
+    ? new MockBacklogDataSource()
+    : (liveDataSource ?? new PendingLiveBacklogDataSource(configState))
 }
 
 function createLiveConnectionAdapter(
@@ -110,7 +109,9 @@ function createNetSuiteEnvironmentSession(
     tokenStore: new SafeStorageRefreshTokenStore({
       tokenNamespace: configState.config.accountId,
       migrateLegacyGenericToken: profile.environment === 'sandbox'
-    })
+    }),
+    forceInteractiveAuthorization: Boolean(profile.requiredOAuthRole),
+    validateAuthorization: (identity) => validateOAuthAuthorizationIdentity(profile, identity)
   })
   const restConnectionTester = new NetSuiteRestConnectionTester({
     config: configState.config,
@@ -143,14 +144,28 @@ function createNetSuiteEnvironmentSession(
     restConnectionTester,
     suiteQlConnectionTester,
     customerIdResolver,
-    salesOrderInspector
+    salesOrderInspector,
+    {
+      requireStartupAuthorization: Boolean(profile.requiredOAuthRole),
+      ...(profile.requiredOAuthRole ? { requiredRoleName: profile.requiredOAuthRole.name } : {})
+    }
   )
 
+  const assertReportAccessAuthorized = (): void => adapter.assertReportAccessAuthorized()
+
   return {
-    getBacklog: (filter) => backlogDataSource.getBacklog(filter),
-    getSalesOrder: (salesOrderNumber) => backlogDataSource.getSalesOrder(salesOrderNumber),
-    getSalesOrderDetails: (salesOrderInternalId) =>
-      salesOrderDetailProvider.getDetails(salesOrderInternalId),
+    getBacklog: (filter) => {
+      assertReportAccessAuthorized()
+      return backlogDataSource.getBacklog(filter)
+    },
+    getSalesOrder: (salesOrderNumber) => {
+      assertReportAccessAuthorized()
+      return backlogDataSource.getSalesOrder(salesOrderNumber)
+    },
+    getSalesOrderDetails: (salesOrderInternalId) => {
+      assertReportAccessAuthorized()
+      return salesOrderDetailProvider.getDetails(salesOrderInternalId)
+    },
     invalidateDetails: () => salesOrderDetailProvider.invalidate(),
     getStatus: () => adapter.getStatus(),
     signIn: () => adapter.signIn(),

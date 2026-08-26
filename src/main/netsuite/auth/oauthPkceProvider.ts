@@ -39,6 +39,12 @@ export interface OAuthBrowser {
   open(url: string): Promise<void>
 }
 
+export interface OAuthAuthorizationIdentity {
+  companyId: string
+  roleId: string
+  entityId: string
+}
+
 export interface OAuthPkceProviderOptions {
   config: NetSuiteConfig
   endpoints: NetSuiteOAuthEndpoints
@@ -49,6 +55,8 @@ export interface OAuthPkceProviderOptions {
   now?: () => number
   authorizationAttemptMaxAgeMs?: number
   tokenTimeoutMs?: number
+  forceInteractiveAuthorization?: boolean
+  validateAuthorization?: (identity: OAuthAuthorizationIdentity) => void
 }
 
 const systemBrowser: OAuthBrowser = {
@@ -67,6 +75,9 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
   private readonly now: () => number
   private readonly authorizationAttemptMaxAgeMs: number
   private readonly tokenTimeoutMs: number
+  private readonly forceInteractiveAuthorization: boolean
+  private readonly validateAuthorization:
+    ((identity: OAuthAuthorizationIdentity) => void) | undefined
   private pendingAuthorization: PendingAuthorization | undefined
   private accessToken: MemoryAccessToken | undefined
   private refreshPromise: Promise<string> | undefined
@@ -84,6 +95,8 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
     this.authorizationAttemptMaxAgeMs =
       options.authorizationAttemptMaxAgeMs ?? DEFAULT_AUTH_ATTEMPT_MAX_AGE_MS
     this.tokenTimeoutMs = options.tokenTimeoutMs ?? DEFAULT_TOKEN_TIMEOUT_MS
+    this.forceInteractiveAuthorization = options.forceInteractiveAuthorization ?? false
+    this.validateAuthorization = options.validateAuthorization
   }
 
   async getAccessToken(): Promise<string> {
@@ -127,6 +140,9 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
     authorizationUrl.searchParams.set('state', pkce.state)
     authorizationUrl.searchParams.set('code_challenge', pkce.codeChallenge)
     authorizationUrl.searchParams.set('code_challenge_method', 'S256')
+    if (this.forceInteractiveAuthorization) {
+      authorizationUrl.searchParams.set('prompt', 'login consent')
+    }
 
     try {
       await this.browser.open(authorizationUrl.toString())
@@ -210,6 +226,10 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
         )
       }
 
+      if (this.validateAuthorization) {
+        this.validateAuthorization(this.readAuthorizationIdentity(callback))
+      }
+
       // Consume the pending attempt before any network call. A duplicate deep
       // link can therefore never exchange the same authorization code twice.
       if (this.pendingAuthorization === pending) this.pendingAuthorization = undefined
@@ -224,6 +244,21 @@ export class OAuthPkceProvider implements NetSuiteAuthProvider {
       // Authorization codes, verifier values, and state are one-time values.
       if (this.pendingAuthorization === pending) this.pendingAuthorization = undefined
     }
+  }
+
+  private readAuthorizationIdentity(callback: URL): OAuthAuthorizationIdentity {
+    const companyId = callback.searchParams.get('company')?.trim()
+    const roleId = callback.searchParams.get('role')?.trim()
+    const entityId = callback.searchParams.get('entity')?.trim()
+
+    if (!companyId || !roleId || !entityId) {
+      throw new NetSuiteIntegrationError(
+        'The NetSuite sign-in callback did not identify the account, role, and user.',
+        { code: 'authentication-failed' }
+      )
+    }
+
+    return { companyId, roleId, entityId }
   }
 
   private parseAndValidateCallback(callbackUri: string): URL {

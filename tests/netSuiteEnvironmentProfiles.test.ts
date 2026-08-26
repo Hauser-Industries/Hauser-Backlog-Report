@@ -40,6 +40,11 @@ describe('NetSuite environment profiles', () => {
       redirectUri: 'hauser-backlog://oauth/callback',
       scope: 'rest_webservices',
       environment: 'production',
+      requiredOAuthRole: {
+        internalId: '1990',
+        scriptId: 'customrole1990',
+        name: 'Hauser Backlog Report API'
+      },
       customers: [
         { internalId: '1432', name: 'LONDON - HAUSER COMPANY STORES' },
         { internalId: '1446', name: 'OTTAWA - HAUSER COMPANY STORES' },

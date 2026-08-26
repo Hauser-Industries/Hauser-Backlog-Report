@@ -49,11 +49,14 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
       totalResults: 4,
       pages: 1
     }))
-    const provider = new NetSuiteSalesOrderDetailProvider({
-      getRestRecord
-    } as unknown as NetSuiteHttpClient, {
-      queryAll
-    } as unknown as SuiteQlClient)
+    const provider = new NetSuiteSalesOrderDetailProvider(
+      {
+        getRestRecord
+      } as unknown as NetSuiteHttpClient,
+      {
+        queryAll
+      } as unknown as SuiteQlClient
+    )
 
     const first = await provider.getDetails('10144')
     const second = await provider.getDetails('10144')
@@ -86,13 +89,16 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
   })
 
   it('keeps optional detail failure localized and sanitized', async () => {
-    const provider = new NetSuiteSalesOrderDetailProvider({
-      getRestRecord: vi.fn(async () => {
-        throw new Error('secret upstream payload')
-      })
-    } as unknown as NetSuiteHttpClient, {
-      queryAll: vi.fn()
-    } as unknown as SuiteQlClient)
+    const provider = new NetSuiteSalesOrderDetailProvider(
+      {
+        getRestRecord: vi.fn(async () => {
+          throw new Error('secret upstream payload')
+        })
+      } as unknown as NetSuiteHttpClient,
+      {
+        queryAll: vi.fn()
+      } as unknown as SuiteQlClient
+    )
 
     await expect(provider.getDetails('10144')).resolves.toEqual({
       success: false,
@@ -134,11 +140,14 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
     const getRestRecord = vi.fn(async () => ({
       item: { items: [{ line: 1, createwo: true }] }
     }))
-    const provider = new NetSuiteSalesOrderDetailProvider({
-      getRestRecord
-    } as unknown as NetSuiteHttpClient, {
-      queryAll: vi.fn()
-    } as unknown as SuiteQlClient)
+    const provider = new NetSuiteSalesOrderDetailProvider(
+      {
+        getRestRecord
+      } as unknown as NetSuiteHttpClient,
+      {
+        queryAll: vi.fn()
+      } as unknown as SuiteQlClient
+    )
 
     await expect(provider.getDetails('10144')).resolves.toEqual({
       success: true,

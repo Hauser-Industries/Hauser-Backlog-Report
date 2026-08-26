@@ -160,6 +160,9 @@ export type NetSuiteEnvironment = 'sandbox' | 'production'
 export type ConnectionIndicator =
   'mock-data' | 'connected' | 'disconnected' | 'authentication-required' | 'connection-error'
 
+export type StartupAuthorizationState =
+  'not-required' | 'required' | 'pending' | 'approved' | 'denied' | 'failed'
+
 export interface NetSuitePublicConfiguration {
   accountId: string
   suiteTalkUrl: string
@@ -174,6 +177,7 @@ export interface ConnectionStatus {
   configured: boolean
   authenticated: boolean
   indicator: ConnectionIndicator
+  startupAuthorization?: StartupAuthorizationState
   accountLabel?: string
   configuration?: NetSuitePublicConfiguration
   message?: string
