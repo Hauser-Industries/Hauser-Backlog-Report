@@ -1,91 +1,69 @@
 # Hauser Backlog Report
 
-Hauser Backlog Report is a private, read-only Windows desktop application for reviewing Hauser Company Stores Sales Order backlog in NetSuite Production. It uses Electron, React, TypeScript, NetSuite REST Web Services, and REST SuiteQL. There is no hosted application, custom backend, database, or NetSuite write capability.
+Hauser Backlog Report is a read-only Windows desktop application that presents Sales Order backlog data from NetSuite. It has no hosted backend, database, or NetSuite write capability.
 
-## How users use the app
+This public README deliberately excludes account IDs, client IDs, role IDs, customer names, API URLs, and other deployment-specific values. Keep those values in a private configuration process, not public documentation.
 
-Every normal Production launch opens the NetSuite Connection screen. The app opens the default browser; the user signs in, selects **Hauser Backlog Report API**, and approves access. Approval returns through `hauser-backlog://oauth/callback` and opens the main report. A denial or incorrect role keeps the user on the Connection screen and the report locked.
+## Tech stack
 
-The report contains:
+- Electron and `electron-builder`
+- React and TypeScript
+- `electron-vite`
+- TanStack Table
+- Zod
+- NetSuite REST Web Services and REST SuiteQL
+- Electron `safeStorage`
+- Vitest and ESLint
 
-- a Production/NetSuite indicator and Connection button;
-- a six-customer filter, Sales Order search, Clear, and Refresh controls;
-- newest Sales Orders first, paging, loading, empty, and error states;
-- horizontal and vertical scrolling; and
-- expandable Work Order information where available.
+## User workflow
 
-The report is read-only. Missing optional data is intentionally shown as blank.
+Each normal live-environment launch opens the NetSuite Connection screen and starts browser OAuth sign-in. The user signs in, selects the organization-approved role, and approves access. A valid callback opens the report. A denied request, wrong account, or wrong role leaves the user on the Connection screen with the report locked.
 
-## Report scope
+The report provides a connection indicator, customer filter, Sales Order search, Clear, Refresh, paging, loading/empty/error states, horizontal and vertical scrolling, and expandable Work Order details where available. Missing optional values are intentionally blank.
 
-The verified report columns are Customer Name, PO #, Work Order #, Sales Order #, Ship To, Item, Item Description, Paint Name, Fabric Name, Welt Name, Button Name, Sum of Qty., Created Date, Due Date, and WO Status. Ship To currently equals Customer Name. Due Date is `custbody_nscs_duedatebal`. Paint/Fabric/Welt/Button remain blank when no resolved value is available.
+## Authentication and authorization
 
-Production customers:
+The app uses OAuth 2.0 Authorization Code Grant with PKCE as a public desktop client.
 
-1. MAIN WAREHOUSE - HAUSER COMPANY STORES
-2. INTERNET - HAUSER COMPANY STORES
-3. WATERLOO - HAUSER COMPANY STORES
-4. OTTAWA - HAUSER COMPANY STORES
-5. LONDON - HAUSER COMPANY STORES
-6. BURLINGTON - HAUSER COMPANY STORES
-
-## Production authorization
-
-Production is protected by an interactive, per-process authorization gate. A saved refresh token alone cannot open the report after the app starts.
-
-1. Electron main creates PKCE verifier, challenge, and state values.
-2. It opens NetSuite OAuth using `prompt=login consent`.
-3. NetSuite returns the browser to `hauser-backlog://oauth/callback`.
-4. Before exchanging the code, the app verifies the callback `company`, `role`, and `entity` values.
+1. Electron main process creates PKCE verifier, challenge, and state values.
+2. It opens account-specific NetSuite OAuth with an interactive login-and-consent prompt.
+3. NetSuite returns the browser to the registered desktop callback protocol.
+4. Before authorization-code exchange, the app validates callback account, role, and user identifiers against the active profile.
 5. Only a valid callback unlocks report IPC requests for that app process.
 
-Production is pinned to these public identifiers:
+A saved refresh token alone must not bypass the live startup gate. A wrong role must be rejected before code exchange, so it cannot unlock the report or replace a saved token. Explicit Sign out clears the local token; a denied authorization does not.
 
-| Identifier              | Value                             |
-| ----------------------- | --------------------------------- |
-| Account ID              | `3850367`                         |
-| Required role ID        | `1990`                            |
-| Required role script ID | `customrole1990`                  |
-| Required role name      | `Hauser Backlog Report API`       |
-| Redirect URI            | `hauser-backlog://oauth/callback` |
-| OAuth scope             | `rest_webservices`                |
+The approved role's display name and internal/script IDs are deployment configuration. Do not put them in public source or documentation.
 
-Another account or any role other than `1990` is rejected before token exchange. Therefore a wrong-role attempt cannot replace an encrypted token or unlock the report. Denying consent does not delete an existing token; explicit Sign out does.
+## Credential and data safety
 
-NetSuite administrators should assign authorized staff the dedicated **Hauser Backlog Report API** role and maintain its least-privileged OAuth 2.0, REST Web Services, SuiteAnalytics Workbook, and report-data permissions. Do not grant Administrator merely to make the app work.
-
-## Security
-
-- Authorization Code Grant with PKCE is used as a public desktop client.
-- No client secret, password, OAuth code, token, or PKCE verifier is bundled or committed.
 - Access tokens stay in Electron main-process memory only.
 - Refresh tokens are encrypted with Electron `safeStorage` using the current Windows user's credentials.
-- Refresh-token storage is namespaced by NetSuite account/environment; Sandbox and Production tokens cannot cross environments.
-- Refresh tokens are one-time use: the old token is consumed before refresh and only the returned replacement is persisted.
-- The React renderer never receives a token, Authorization header, PKCE verifier, or raw NetSuite response body.
-- Windows routes `hauser-backlog://` to `Hauser Backlog Report.exe`; no local web server runs.
+- Refresh-token storage is isolated by NetSuite account/environment; tokens must not cross profiles.
+- Refresh tokens are one-time use: consume the old token before refresh and save only the replacement token.
+- The renderer must never receive tokens, Authorization headers, PKCE verifiers, or raw full NetSuite response bodies.
+- The desktop callback protocol eliminates the need for a local web server.
 
-Never place tokens, Authorization headers, PKCE values, passwords, or raw full NetSuite API responses in logs, UI, IPC results, screenshots, `.env`, JSON settings, localStorage, or Git.
+Never commit credentials, OAuth codes, token data, Authorization headers, PKCE values, raw API responses, customer exports, or deployment identifiers. Do not display them in UI diagnostics, logs, screenshots, `.env` files, JSON settings, localStorage, or public issues.
 
-## Environments
+## Environment profiles
 
-| Environment | Account ID    | Use                                             |
-| ----------- | ------------- | ----------------------------------------------- |
-| Production  | `3850367`     | Live report; startup account/role gate enforced |
-| Sandbox     | `3850367_SB1` | Retained for diagnostics and testing            |
+The app supports independent live and sandbox profiles. Each profile needs separate non-secret OAuth/API configuration, customer configuration, role-validation configuration, and encrypted refresh-token namespace.
 
-Profiles are in `src/main/netsuite/config/environmentProfiles.ts`. Each holds a non-secret account ID, SuiteTalk URL, public client ID, redirect URI, scope, customer set, and independent encrypted-token namespace. Switching environments clears only volatile access-token/PKCE state; it does not delete the other environment's token. Sandbox is not part of normal Production startup.
+When switching profiles, clear in-memory access-token and PKCE state, load only the selected profile's OAuth state, preserve the other profile's stored token, and require sign-in if needed. Do not add a client secret: the app is designed as a public client.
 
 ## Connection and diagnostics
 
-**Connection** opens Connection/Diagnostics. All diagnostic calls run in Electron's main process using the active profile. They return sanitized typed data only.
+The Connection screen is separate from the report. Its read-only diagnostics run only in Electron's main process through the existing authenticated NetSuite HTTP and SuiteQL infrastructure.
 
-| Tool                 | Purpose                                                                                                                       |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Test Connection      | Real REST call: `GET /services/rest/record/v1/metadata-catalog/customer`, using `Accept: application/schema+json`.            |
-| Test SuiteQL         | Read-only customer SuiteQL request through REST SuiteQL.                                                                      |
-| Resolve Customer IDs | Finds candidate records for the six configured customers; it does not modify configuration.                                   |
-| Inspect Sales Order  | Read-only, strictly normalized `SO<number>` diagnostic. Its compatibility request body contains only `q`, not bound `params`. |
+| Tool | Purpose |
+| --- | --- |
+| Test Connection | Makes a real REST Web Services metadata request to prove authentication and REST connectivity. |
+| Test SuiteQL | Executes a read-only SuiteQL query through the REST SuiteQL endpoint. |
+| Resolve Customer IDs | Finds customer candidates without writing configuration. |
+| Inspect Sales Order | Runs a read-only diagnostic for a strictly normalized Sales Order number. |
+
+Diagnostics must return typed, sanitized results only. Preserve the existing OAuth provider, HTTP client, SuiteQL client, IPC channels, preload API, and error-handling architecture when extending them.
 
 ## Architecture
 
@@ -94,9 +72,9 @@ React renderer
     | typed preload IPC only
     v
 Electron main process
-    |- connection/environment manager
-    |- OAuth PKCE and encrypted refresh-token store
-    |- NetSuite HTTP and SuiteQL clients
+    |- connection and environment manager
+    |- OAuth PKCE provider and encrypted refresh-token store
+    |- authenticated NetSuite HTTP and SuiteQL clients
     |- read-only backlog and Work Order providers
     `- typed, sanitized diagnostic results
     v
@@ -107,7 +85,7 @@ Repository layout:
 
 ```text
 src/main/       Electron lifecycle, OAuth, IPC, NetSuite clients and repositories
-src/preload/    Narrow typed bridge for the renderer
+src/preload/    Narrow typed bridge exposed to the renderer
 src/renderer/   React report and Connection/Diagnostics interface
 src/shared/     Cross-process types, constants, and pure utilities
 tests/          Unit and mocked integration tests; no NetSuite network access
@@ -116,25 +94,24 @@ build/          electron-builder resources
 release/        Generated Windows installers (ignored by Git)
 ```
 
-Important starting points:
+Useful maintainer entry points:
 
 - `src/main/netsuite/auth/oauthPkceProvider.ts` — PKCE, callback validation, token exchange, and refresh rotation
-- `src/main/netsuite/auth/oauthAuthorizationValidator.ts` — Production callback account/role validation
-- `src/main/netsuite/config/environmentProfiles.ts` — profiles, customers, and required Production role
-- `src/main/netsuite/connection/netSuiteConnectionAdapter.ts` — launch-gate state and report access guard
+- `src/main/netsuite/auth/oauthAuthorizationValidator.ts` — active-profile callback account/role validation
+- `src/main/netsuite/config/environmentProfiles.ts` — environment profile configuration location
+- `src/main/netsuite/connection/netSuiteConnectionAdapter.ts` — launch gate state and report access guard
 - `src/main/netsuite/client/` — authenticated REST and SuiteQL infrastructure
 - `src/renderer/src/app/App.tsx` — startup Connection screen and report home screen
-- `src/renderer/src/features/connection/` — Connection and diagnostic UI
+- `src/renderer/src/features/connection/` — Connection and diagnostics UI
 
 ## Rules for future changes
 
 - Keep NetSuite HTTP, OAuth, SuiteQL, and Work Order calls in `src/main`; never fetch from React.
-- Reuse existing OAuth, HTTP, SuiteQL, IPC, preload, and sanitized-error infrastructure. Do not create parallel clients.
-- Keep operations read-only unless a separately approved redesign authorizes writes.
-- Do not bypass the Production role gate or replace numeric role validation with a display-name-only check.
-- Strictly validate and normalize user input before it becomes part of SuiteQL. Do not make generic unsafe query interpolation available.
-- Preserve the working Connection, SuiteQL, customer-resolution, and Sales Order diagnostics when changing report behavior.
-- Public account/client identifiers may be packaged; credentials never may be.
+- Keep NetSuite operations read-only unless a separately approved redesign authorizes writes.
+- Do not bypass the startup role gate or replace exact role-ID validation with a display-name-only check.
+- Strictly validate and normalize user input before it becomes part of SuiteQL. Do not create generic unsafe query interpolation.
+- Preserve working diagnostics when adding report functionality.
+- Do not commit real deployment identifiers or configuration to a public repository. Use placeholders or a private configuration source.
 
 ## Development
 
@@ -145,36 +122,27 @@ npm install
 npm run dev
 ```
 
-Packaged builds default to live mode. Use mock data only for local development:
+For local development without NetSuite, use mock data:
 
 ```text
 # .env
 DATA_SOURCE=mock
 ```
 
-Mock mode is visibly labelled and makes no NetSuite requests.
+Mock mode should be visibly labelled and must not send NetSuite requests.
 
 ## Verification and installer
-
-Run checks individually:
 
 ```bash
 npm run typecheck
 npm run lint
 npm test
 npm run build
-```
-
-Build a new x64 Windows NSIS installer:
-
-```bash
 npm run dist:win
 ```
 
-The expected installer is `release/Hauser Backlog Report Setup 1.0.0.exe`.
-
-`npm run build` writes only the unpackaged bundle to `out/`; it does **not** update an installed app. Run `npm run dist:win` and install the newly generated `.exe` to test or distribute changes.
+`npm run build` writes only the unpackaged bundle to `out/`; it does **not** update an installed application. Generate and install the newly produced Windows installer to test or distribute changes.
 
 ## Continuous integration
 
-`.github/workflows/build-windows.yml` runs Windows formatting, linting, type checking, tests, build, and unsigned installer generation. It does not publish releases or use NetSuite credentials.
+The Windows workflow runs formatting, linting, type checking, tests, build, and unsigned installer generation. It should not publish releases or use NetSuite credentials.
