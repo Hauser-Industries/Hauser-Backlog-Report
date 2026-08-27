@@ -1,4 +1,10 @@
-import type { BacklogFilter, BacklogPageData, SalesOrderDetailsResult } from '@shared/types/backlog'
+import type {
+  BacklogFilter,
+  BacklogPageData,
+  SalesOrderDetailsResult,
+  WorkOrderBuiltRequest,
+  WorkOrderBuiltResult
+} from '@shared/types/backlog'
 
 /**
  * Main-process boundary used by both mock data and the future NetSuite adapter.
@@ -9,5 +15,6 @@ export interface BacklogDataSource {
   getBacklog(filter: BacklogFilter): Promise<BacklogPageData>
   getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
+  getWorkOrderBuilt?(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
   invalidateDetails?(): void
 }

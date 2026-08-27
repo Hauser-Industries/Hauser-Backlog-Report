@@ -14,7 +14,9 @@ import type {
   SalesOrderDetailsRequest,
   SalesOrderDetailsResult,
   SuiteQlTestResult,
-  SwitchNetSuiteEnvironmentRequest
+  SwitchNetSuiteEnvironmentRequest,
+  WorkOrderBuiltRequest,
+  WorkOrderBuiltResult
 } from '@shared/types/backlog'
 
 const { app, ipcMain } = electron
@@ -24,6 +26,7 @@ export interface BacklogController {
   searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse>
   refreshBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
+  getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
 }
 
 export interface ConnectionController {
@@ -83,6 +86,19 @@ const salesOrderDetailsSchema = z
     salesOrderInternalId
   }))
 
+const workOrderBuiltSchema = z
+  .strictObject({
+    workOrders: z
+      .array(
+        z.strictObject({
+          workOrderInternalId: z.string().trim().regex(/^[0-9]+$/),
+          workOrderNumber: z.string().trim().min(1).max(80)
+        })
+      )
+      .max(100)
+  })
+  .transform<WorkOrderBuiltRequest>(({ workOrders }) => ({ workOrders }))
+
 const salesOrderInspectionSchema = z
   .strictObject({
     salesOrderNumber: z.string().trim().min(1).max(40)
@@ -138,6 +154,9 @@ export function registerIpcHandlers({ backlog, connection }: IpcDependencies): v
   )
   registerValidatedHandler(IPC_CHANNELS.getSalesOrderDetails, salesOrderDetailsSchema, (request) =>
     backlog.getSalesOrderDetails(request.salesOrderInternalId)
+  )
+  registerValidatedHandler(IPC_CHANNELS.getWorkOrderBuilt, workOrderBuiltSchema, (request) =>
+    backlog.getWorkOrderBuilt(request)
   )
 
   registerNoArgumentHandler(IPC_CHANNELS.getConnectionStatus, () => connection.getStatus())

@@ -1,15 +1,24 @@
-import { Fragment, useState, type KeyboardEvent } from 'react'
+import { Fragment, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 
 import type {
   BacklogItemRow,
   SalesOrderDetailsResult,
   SalesOrderGroup,
-  SalesOrderItemDetail
+  SalesOrderItemDetail,
+  WorkOrderBuiltRequest,
+  WorkOrderBuiltResult
 } from '@shared/types/backlog'
 import { formatDate } from '@shared/utils/date'
 import { formatQuantity } from '@shared/utils/quantity'
 import { ChevronIcon } from '../../components/icons'
 import { StatusBadge } from '../../components/StatusBadge'
+import {
+  BACKLOG_TABLE_HEADERS,
+  getBuiltCompletionState,
+  MIN_REPORT_COLUMN_WIDTH,
+  setReportColumnWidth,
+  displayWorkOrderStatus
+} from './backlogTablePresentation'
 
 interface BacklogTableProps {
   salesOrders: SalesOrderGroup[]
@@ -20,38 +29,26 @@ interface BacklogTableProps {
   hasNext: boolean
   onPageChange: (page: number) => void
   onLoadDetails: (salesOrderInternalId: string) => Promise<SalesOrderDetailsResult>
+  onLoadBuilt: (request: WorkOrderBuiltRequest) => Promise<WorkOrderBuiltResult>
 }
 
 interface DetailState {
   loading: boolean
   items: SalesOrderItemDetail[]
+  builtByWorkOrder: Record<string, number | null>
   error?: string
 }
 
-const COLUMN_WIDTHS = [
-  260, 125, 115, 130, 230, 125, 100, 125, 180, 130, 190, 125, 180, 125, 180, 120, 120, 165
+const DEFAULT_COLUMN_WIDTHS = [
+  260, 125, 115, 125, 230, 180, 190, 180, 180, 100, 100, 125, 165, 120, 120
 ] as const
 
-const HEADERS = [
-  'Customer Name',
-  'Sales Order #',
-  'PO #',
-  'Item',
-  'Item Description',
-  'Work Order #',
-  'Sum of Qty.',
-  'Paint Name',
-  'Paint Description',
-  'Fabric Name',
-  'Fabric Description',
-  'Welt Name',
-  'Welt Description',
-  'Button Name',
-  'Button Description',
-  'Created Date',
-  'Due Date',
-  'WO Status'
-] as const
+interface ColumnResizeState {
+  columnIndex: number
+  pointerId: number
+  startX: number
+  startWidth: number
+}
 
 function displayText(value: string | null | undefined): string {
   return value?.trim() || ''
@@ -61,11 +58,6 @@ function displayDate(value: string | null | undefined): string {
   if (!value) return ''
   const formatted = formatDate(value)
   return formatted === '—' ? '' : formatted
-}
-
-function displayWorkOrderStatus(value: string | undefined): string {
-  const normalized = value?.trim() ?? ''
-  return normalized === 'No Work Order' ? '' : normalized
 }
 
 function itemDetail(
@@ -92,10 +84,115 @@ export function BacklogTable({
   hasPrevious,
   hasNext,
   onPageChange,
-  onLoadDetails
+  onLoadDetails,
+  onLoadBuilt
 }: BacklogTableProps) {
   const [expandedSalesOrders, setExpandedSalesOrders] = useState<Set<string>>(() => new Set())
   const [detailBySalesOrder, setDetailBySalesOrder] = useState<Record<string, DetailState>>({})
+  const [columnWidths, setColumnWidths] = useState<number[]>(() => [...DEFAULT_COLUMN_WIDTHS])
+  const columnResize = useRef<ColumnResizeState | undefined>(undefined)
+
+  const startColumnResize = (
+    event: PointerEvent<HTMLButtonElement>,
+    columnIndex: number
+  ): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    columnResize.current = {
+      columnIndex,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: columnWidths[columnIndex] ?? MIN_REPORT_COLUMN_WIDTH
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const resizeColumn = (event: PointerEvent<HTMLButtonElement>): void => {
+    const active = columnResize.current
+    if (!active || active.pointerId !== event.pointerId) return
+    setColumnWidths((current) =>
+      setReportColumnWidth(
+        current,
+        active.columnIndex,
+        active.startWidth + event.clientX - active.startX
+      )
+    )
+  }
+
+  const finishColumnResize = (event: PointerEvent<HTMLButtonElement>): void => {
+    if (columnResize.current?.pointerId !== event.pointerId) return
+    columnResize.current = undefined
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const resizeColumnWithKeyboard = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    columnIndex: number
+  ): void => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const delta = event.key === 'ArrowLeft' ? -10 : 10
+    setColumnWidths((current) =>
+      setReportColumnWidth(current, columnIndex, (current[columnIndex] ?? 0) + delta)
+    )
+  }
+
+  const loadDetails = async (salesOrder: SalesOrderGroup): Promise<void> => {
+    const id = salesOrder.salesOrderInternalId
+    if (detailBySalesOrder[id]) return
+
+    setDetailBySalesOrder((current) => ({
+      ...current,
+      [id]: { loading: true, items: [], builtByWorkOrder: {} }
+    }))
+    const workOrders = [
+      ...new Map(
+        salesOrder.items.flatMap((item) =>
+          item.workOrderInternalId && item.workOrderNumber
+            ? [
+                [
+                  item.workOrderInternalId,
+                  {
+                    workOrderInternalId: item.workOrderInternalId,
+                    workOrderNumber: item.workOrderNumber
+                  }
+                ] as const
+              ]
+            : []
+        )
+      ).values()
+    ]
+    const [detailsOutcome, builtOutcome] = await Promise.allSettled([
+      onLoadDetails(id),
+      workOrders.length === 0
+        ? Promise.resolve({ success: true as const, values: [] })
+        : onLoadBuilt({ workOrders })
+    ])
+    const details = detailsOutcome.status === 'fulfilled' ? detailsOutcome.value : undefined
+    const builtValues = builtOutcome.status === 'fulfilled' ? builtOutcome.value.values : []
+    const builtByWorkOrder = Object.fromEntries(
+      builtValues.map(({ workOrderInternalId, built }) => [workOrderInternalId, built])
+    )
+
+    setDetailBySalesOrder((current) => ({
+      ...current,
+      [id]: {
+        loading: false,
+        items: details?.success ? details.items : [],
+        builtByWorkOrder,
+        ...(!details || !details.success
+          ? {
+              error:
+                details && !details.success
+                  ? details.message
+                  : 'Optional item details could not be loaded for this Sales Order.'
+            }
+          : {})
+      }
+    }))
+  }
 
   const toggleSalesOrder = (salesOrder: SalesOrderGroup): void => {
     const id = salesOrder.salesOrderInternalId
@@ -107,30 +204,21 @@ export function BacklogTable({
       return next
     })
 
-    if (!willExpand || detailBySalesOrder[id]) return
-    setDetailBySalesOrder((current) => ({
-      ...current,
-      [id]: { loading: true, items: [] }
-    }))
-    void onLoadDetails(id)
-      .then((result) => {
-        setDetailBySalesOrder((current) => ({
-          ...current,
-          [id]: result.success
-            ? { loading: false, items: result.items }
-            : { loading: false, items: [], error: result.message }
-        }))
-      })
-      .catch(() => {
-        setDetailBySalesOrder((current) => ({
-          ...current,
-          [id]: {
-            loading: false,
-            items: [],
-            error: 'Optional item details could not be loaded for this Sales Order.'
-          }
-        }))
-      })
+    if (willExpand) void loadDetails(salesOrder)
+  }
+
+  const expandAll = (): void => {
+    setExpandedSalesOrders(
+      new Set(salesOrders.map((salesOrder) => salesOrder.salesOrderInternalId))
+    )
+    void (async () => {
+      // Keep bulk expansion gentle on NetSuite's concurrency limits.
+      for (const salesOrder of salesOrders) await loadDetails(salesOrder)
+    })()
+  }
+
+  const collapseAll = (): void => {
+    setExpandedSalesOrders(new Set())
   }
 
   const handleParentKeyDown = (
@@ -145,24 +233,70 @@ export function BacklogTable({
   const firstVisible = totalSalesOrders === 0 ? 0 : page * pageSize + 1
   const lastVisible = Math.min((page + 1) * pageSize, totalSalesOrders)
   const pageCount = Math.max(1, Math.ceil(totalSalesOrders / pageSize))
+  const allExpanded =
+    salesOrders.length > 0 &&
+    salesOrders.every((salesOrder) => expandedSalesOrders.has(salesOrder.salesOrderInternalId))
+  const anyExpanded = expandedSalesOrders.size > 0
+  const tableWidth = columnWidths.reduce((total, width) => total + width, 0)
 
   return (
     <div className="report-table-shell">
+      <div className="report-table-actions" aria-label="Sales Order expansion controls">
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={expandAll}
+          disabled={salesOrders.length === 0 || allExpanded}
+        >
+          Expand All
+        </button>
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={collapseAll}
+          disabled={!anyExpanded}
+        >
+          Collapse All
+        </button>
+      </div>
       <div
         className="report-table-scroll"
         tabIndex={0}
         aria-label="Backlog report table, horizontally and vertically scrollable"
       >
-        <table className="report-table report-table--grouped">
+        <table
+          className="report-table report-table--grouped"
+          style={{ width: tableWidth, minWidth: tableWidth }}
+        >
           <colgroup>
-            {COLUMN_WIDTHS.map((width, index) => (
-              <col key={HEADERS[index]} style={{ width }} />
+            {columnWidths.map((width, index) => (
+              <col key={BACKLOG_TABLE_HEADERS[index]} style={{ width }} />
             ))}
           </colgroup>
           <thead>
             <tr>
-              {HEADERS.map((header) => (
-                <th key={header}>{header}</th>
+              {BACKLOG_TABLE_HEADERS.map((header, columnIndex) => (
+                <th key={header}>
+                  <span>{header}</span>
+                  <button
+                    className="column-resize-handle"
+                    type="button"
+                    role="separator"
+                    aria-label={`Resize ${header} column`}
+                    aria-orientation="vertical"
+                    aria-valuemin={MIN_REPORT_COLUMN_WIDTH}
+                    aria-valuenow={columnWidths[columnIndex]}
+                    title={`Resize ${header} column`}
+                    onPointerDown={(event) => startColumnResize(event, columnIndex)}
+                    onPointerMove={resizeColumn}
+                    onPointerUp={finishColumnResize}
+                    onPointerCancel={finishColumnResize}
+                    onLostPointerCapture={() => {
+                      columnResize.current = undefined
+                    }}
+                    onKeyDown={(event) => resizeColumnWithKeyboard(event, columnIndex)}
+                  />
+                </th>
               ))}
             </tr>
           </thead>
@@ -203,64 +337,73 @@ export function BacklogTable({
                       </button>
                     </td>
                     <td>{displayText(salesOrder.poNumber)}</td>
-                    {Array.from({ length: 12 }, (_, index) => (
+                    {Array.from({ length: 10 }, (_, index) => (
                       <td key={`parent-empty-${index}`} />
                     ))}
                     <td>{displayDate(salesOrder.createdDate)}</td>
                     <td>{displayDate(salesOrder.dueDate)}</td>
-                    <td />
                   </tr>
                   {expanded
                     ? salesOrder.items.map((basicItem) => {
                         const item = mergeItem(basicItem, detailState?.items ?? [])
+                        const hasLoadedBuilt = Boolean(
+                          item.workOrderInternalId &&
+                            detailState &&
+                            Object.hasOwn(detailState.builtByWorkOrder, item.workOrderInternalId)
+                        )
+                        const built =
+                          hasLoadedBuilt && item.workOrderInternalId
+                            ? detailState?.builtByWorkOrder[item.workOrderInternalId]
+                            : item.built
                         return (
                           <tr className="report-row sales-order-item-row" key={item.rowKey}>
-                            <td>
-                              <span className="customer-cell">
-                                {displayText(salesOrder.customerName)}
-                              </span>
-                            </td>
-                            <td>
-                              <strong>{displayText(salesOrder.salesOrderNumber)}</strong>
-                            </td>
-                            <td>{displayText(salesOrder.poNumber)}</td>
+                            <td />
+                            <td />
+                            <td />
                             <td>
                               <span className="item-cell">{displayText(item.item)}</span>
                             </td>
                             <td>{displayText(item.itemDescription)}</td>
-                            <td>{displayText(item.workOrderNumber)}</td>
+                            <td>{displayText(item.paintDescription)}</td>
+                            <td>{displayText(item.fabricDescription)}</td>
+                            <td>{displayText(item.weltDescription)}</td>
+                            <td>{displayText(item.buttonDescription)}</td>
                             <td>
                               <span className="numeric numeric--emphasis">
                                 {formatQuantity(item.quantity)}
                               </span>
                             </td>
-                            <td>{displayText(item.paintName)}</td>
-                            <td>{displayText(item.paintDescription)}</td>
-                            <td>{displayText(item.fabricName)}</td>
-                            <td>{displayText(item.fabricDescription)}</td>
-                            <td>{displayText(item.weltName)}</td>
-                            <td>{displayText(item.weltDescription)}</td>
-                            <td>{displayText(item.buttonName)}</td>
-                            <td>{displayText(item.buttonDescription)}</td>
-                            <td>{displayDate(salesOrder.createdDate)}</td>
-                            <td>{displayDate(salesOrder.dueDate)}</td>
+                            <td>
+                              <span
+                                className={`built-value numeric built-value--${getBuiltCompletionState(built, item.quantity)}`}
+                              >
+                                {built === undefined || built === null || !Number.isFinite(built)
+                                  ? '—'
+                                  : formatQuantity(built)}
+                              </span>
+                            </td>
+                            <td>{displayText(item.workOrderNumber)}</td>
                             <td>
                               {displayWorkOrderStatus(item.workOrderStatus) ? (
                                 <StatusBadge label={displayWorkOrderStatus(item.workOrderStatus)} />
                               ) : null}
                             </td>
+                            <td />
+                            <td />
                           </tr>
                         )
                       })
                     : null}
                   {expanded && detailState?.loading ? (
                     <tr className="optional-detail-row">
-                      <td colSpan={HEADERS.length}>Loading optional item details…</td>
+                      <td colSpan={BACKLOG_TABLE_HEADERS.length}>
+                        Loading optional item details…
+                      </td>
                     </tr>
                   ) : null}
                   {expanded && detailState?.error ? (
                     <tr className="optional-detail-row optional-detail-row--error">
-                      <td colSpan={HEADERS.length}>{detailState.error}</td>
+                      <td colSpan={BACKLOG_TABLE_HEADERS.length}>{detailState.error}</td>
                     </tr>
                   ) : null}
                 </Fragment>

@@ -68,6 +68,7 @@ export interface BacklogItemRow {
   item: string
   itemDescription: string
   quantity: number | null
+  built?: number
   workOrderInternalId?: string
   workOrderNumber?: string
   paintName?: string
@@ -142,6 +143,25 @@ export interface SalesOrderItemDetail {
 
 export interface SalesOrderDetailsRequest {
   salesOrderInternalId: string
+}
+
+export interface WorkOrderBuiltReference {
+  workOrderInternalId: string
+  workOrderNumber: string
+}
+
+export interface WorkOrderBuiltRequest {
+  workOrders: WorkOrderBuiltReference[]
+}
+
+export interface WorkOrderBuiltValue {
+  workOrderInternalId: string
+  built: number | null
+}
+
+export interface WorkOrderBuiltResult {
+  success: true
+  values: WorkOrderBuiltValue[]
 }
 
 export type SalesOrderDetailsResult =
@@ -375,6 +395,7 @@ export interface HauserBacklogApi {
   searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse>
   refreshBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   getSalesOrderDetails(request: SalesOrderDetailsRequest): Promise<SalesOrderDetailsResult>
+  getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
   getConnectionStatus(): Promise<ConnectionStatus>
   signIn(): Promise<ConnectionStatus>
   signOut(): Promise<ConnectionStatus>

@@ -133,6 +133,7 @@ export class NetSuiteBacklogRepository implements BacklogRepository {
           item.workOrderInternalId = workOrder.internalId
           item.workOrderNumber = workOrder.number
           if (workOrder.status) item.workOrderStatus = workOrder.status
+          if (workOrder.built !== undefined) item.built = workOrder.built
         }
       }
     } catch {

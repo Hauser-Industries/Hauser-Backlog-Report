@@ -4,6 +4,7 @@ import { parseNetSuiteNumber } from '../src/main/netsuite/transforms/netSuiteNum
 
 describe('parseNetSuiteNumber', () => {
   it.each([
+    ['0', 0],
     ['1', 1],
     ['2', 2],
     ['-1', -1],

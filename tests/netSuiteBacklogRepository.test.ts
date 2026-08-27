@@ -181,4 +181,64 @@ describe('NetSuiteBacklogRepository two-stage paging', () => {
       workOrderStatus: 'No Work Order'
     })
   })
+
+  it('merges the normalized Work Order Built quantity onto the matching item row', async () => {
+    const suiteQlClient = {
+      executeSuiteQL: vi.fn(async () => ({
+        count: 1,
+        offset: 0,
+        totalResults: 1,
+        hasMore: false,
+        items: [
+          {
+            sales_order_internal_id: '10144',
+            sales_order_number: 'SO10144',
+            customer_internal_id: '1578',
+            customer_name: 'WATERLOO - HAUSER COMPANY STORES'
+          }
+        ]
+      })),
+      queryAll: vi.fn(async () => ({
+        items: [
+          {
+            sales_order_internal_id: '10144',
+            line_id: '11',
+            line_sequence: '1',
+            item_internal_id: '44',
+            item: 'HSPR0290C',
+            quantity_api_value: '-4'
+          }
+        ],
+        totalResults: 1,
+        pages: 1
+      }))
+    } as unknown as SuiteQlClient
+    const repository = new NetSuiteBacklogRepository(
+      suiteQlClient,
+      new VerifiedBacklogQueryFactory(getNetSuiteEnvironmentProfileByEnvironment('production')),
+      { verified: true, orderedSign: 'invert' },
+      {
+        resolve: vi.fn(async () => ({
+          succeeded: true,
+          relationship: 'NextTransactionLineLink' as const,
+          bySalesOrderLine: new Map([
+            [
+              '10144:11',
+              { internalId: '900', number: 'WO777', status: 'Released', built: 2.5 }
+            ]
+          ]),
+          ambiguousLineKeys: new Set<string>()
+        }))
+      }
+    )
+
+    const page = await repository.getBacklog({})
+
+    expect(page.salesOrders[0]?.items[0]).toMatchObject({
+      quantity: 4,
+      built: 2.5,
+      workOrderNumber: 'WO777',
+      workOrderStatus: 'Released'
+    })
+  })
 })

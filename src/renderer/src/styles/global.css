@@ -455,6 +455,22 @@ main {
   min-width: 0;
 }
 
+.report-table-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  min-height: 49px;
+  padding: 7px 14px;
+  background: #f8f9f9;
+  border-bottom: 1px solid var(--line);
+}
+
+.report-table-actions .button {
+  min-height: 33px;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+
 .report-table-scroll {
   width: 100%;
   max-width: 100%;
@@ -492,8 +508,8 @@ main {
 }
 
 .report-table--grouped {
-  width: 2725px;
-  min-width: 2725px;
+  width: 2315px;
+  min-width: 2315px;
 }
 
 .report-table thead {
@@ -503,6 +519,7 @@ main {
 }
 
 .report-table th {
+  position: relative;
   height: 43px;
   padding: 0 11px;
   color: #eaf1ef;
@@ -539,6 +556,39 @@ main {
 .report-table th button svg {
   flex: 0 0 auto;
   opacity: 0.72;
+}
+
+.report-table th .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  z-index: 2;
+  display: block;
+  width: 10px;
+  min-width: 10px;
+  height: 100%;
+  padding: 0;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: col-resize;
+}
+
+.report-table th .column-resize-handle::after {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  bottom: 8px;
+  width: 2px;
+  content: '';
+  background: rgb(255 255 255 / 28%);
+  border-radius: 2px;
+}
+
+.report-table th .column-resize-handle:hover::after,
+.report-table th .column-resize-handle:focus-visible::after {
+  background: #fff;
 }
 
 .report-table td {
@@ -644,6 +694,40 @@ main {
 .numeric--emphasis {
   color: #1f564b;
   font-weight: 750;
+}
+
+.built-value {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 27px;
+  padding: 4px 8px;
+  align-items: center;
+  justify-content: flex-end;
+  font-weight: 750;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.built-value--none {
+  color: #8b2922;
+  background: #fde8e6;
+  border-color: #e6a29c;
+}
+
+.built-value--partial {
+  color: #75520c;
+  background: #fff2cc;
+  border-color: #e3c76d;
+}
+
+.built-value--complete {
+  color: #1a5b49;
+  background: #dff1e9;
+  border-color: #8bc4b3;
+}
+
+.built-value--unavailable {
+  color: inherit;
 }
 
 .status-badge {

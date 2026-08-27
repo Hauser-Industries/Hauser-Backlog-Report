@@ -23,6 +23,7 @@ import { NetSuiteBacklogDataSource } from './netsuite/dataSource/netSuiteBacklog
 import { NetSuiteBacklogRepository } from './netsuite/repositories/backlogRepository'
 import { VerifiedBacklogQueryFactory } from './netsuite/queries/backlogQuery'
 import { NetSuiteSalesOrderDetailProvider } from './netsuite/details/salesOrderDetailProvider'
+import { NetSuiteRestWorkOrderBuiltProvider } from './netsuite/workOrders/workOrderBuiltProvider'
 import { NetSuiteWorkOrderRelationshipResolver } from './netsuite/workOrders/workOrderRelationshipResolver'
 import {
   NETSUITE_ENVIRONMENT_PROFILES,
@@ -123,6 +124,7 @@ function createNetSuiteEnvironmentSession(
   })
   const suiteQlClient = new SuiteQlClient(httpClient)
   const salesOrderDetailProvider = new NetSuiteSalesOrderDetailProvider(httpClient, suiteQlClient)
+  const workOrderBuiltProvider = new NetSuiteRestWorkOrderBuiltProvider(httpClient)
   const workOrderRelationshipResolver = new NetSuiteWorkOrderRelationshipResolver(suiteQlClient)
   const suiteQlConnectionTester = new NetSuiteSuiteQlTester({ suiteQlClient })
   const customerIdResolver = new NetSuiteCustomerIdResolver({ suiteQlClient })
@@ -166,7 +168,14 @@ function createNetSuiteEnvironmentSession(
       assertReportAccessAuthorized()
       return salesOrderDetailProvider.getDetails(salesOrderInternalId)
     },
-    invalidateDetails: () => salesOrderDetailProvider.invalidate(),
+    getWorkOrderBuilt: (request) => {
+      assertReportAccessAuthorized()
+      return workOrderBuiltProvider.getBuiltValues(request.workOrders)
+    },
+    invalidateDetails: () => {
+      salesOrderDetailProvider.invalidate()
+      workOrderBuiltProvider.invalidate()
+    },
     getStatus: () => adapter.getStatus(),
     signIn: () => adapter.signIn(),
     signOut: () => adapter.signOut(),

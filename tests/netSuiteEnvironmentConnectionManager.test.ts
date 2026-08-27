@@ -63,6 +63,15 @@ function createSessionFactory(records: SessionRecord[]) {
       async getSalesOrderDetails() {
         return { success: true, items: [] }
       },
+      async getWorkOrderBuilt(request) {
+        return {
+          success: true,
+          values: request.workOrders.map(({ workOrderInternalId }) => ({
+            workOrderInternalId,
+            built: null
+          }))
+        }
+      },
       invalidateDetails(): void {},
       async getStatus(): Promise<ConnectionStatus> {
         return {

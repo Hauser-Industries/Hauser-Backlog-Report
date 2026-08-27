@@ -2,6 +2,13 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { BacklogTable } from '../src/renderer/src/features/backlog/BacklogTable'
+import {
+  BACKLOG_TABLE_HEADERS,
+  displayWorkOrderStatus,
+  getBuiltCompletionState,
+  MIN_REPORT_COLUMN_WIDTH,
+  setReportColumnWidth
+} from '../src/renderer/src/features/backlog/backlogTablePresentation'
 import type { SalesOrderGroup } from '../src/shared/types/backlog'
 
 const salesOrder: SalesOrderGroup = {
@@ -32,11 +39,12 @@ const sharedProps = {
   hasPrevious: false,
   hasNext: false,
   onPageChange: () => undefined,
-  onLoadDetails: async () => ({ success: true as const, items: [] })
+  onLoadDetails: async () => ({ success: true as const, items: [] }),
+  onLoadBuilt: async () => ({ success: true as const, values: [] })
 }
 
 describe('BacklogTable grouped report contract', () => {
-  it('renders exactly the approved 18 columns in order and one collapsed Sales Order parent', () => {
+  it('renders the approved columns, including Built after Sum of Qty., and resize handles', () => {
     const markup = renderToStaticMarkup(
       <BacklogTable salesOrders={[salesOrder]} {...sharedProps} />
     )
@@ -46,22 +54,21 @@ describe('BacklogTable grouped report contract', () => {
       'PO #',
       'Item',
       'Item Description',
-      'Work Order #',
-      'Sum of Qty.',
-      'Paint Name',
       'Paint Description',
-      'Fabric Name',
       'Fabric Description',
-      'Welt Name',
       'Welt Description',
-      'Button Name',
       'Button Description',
+      'Sum of Qty.',
+      'Built',
+      'Work Order #',
+      'WO Status',
       'Created Date',
-      'Due Date',
-      'WO Status'
+      'Due Date'
     ]
 
-    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(18)
+    expect(BACKLOG_TABLE_HEADERS).toEqual(expectedHeaders)
+    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(15)
+    expect(markup.match(/role="separator"/g)).toHaveLength(15)
     let priorIndex = -1
     for (const header of expectedHeaders) {
       const index = markup.indexOf(header)
@@ -71,11 +78,39 @@ describe('BacklogTable grouped report contract', () => {
     expect(markup).toContain('WATERLOO - HAUSER COMPANY STORES')
     expect(markup).toContain('SO1234')
     expect(markup).not.toContain('Ship To')
+    expect(markup).not.toMatch(/Paint Name|Fabric Name|Welt Name|Button Name/)
     expect(markup).not.toMatch(/Qty Shipped|Qty Remaining/i)
     expect(markup).toContain('class="sales-order-expand-button"')
     expect(markup).toContain('aria-expanded="false"')
     expect(markup).not.toContain('CHAIR-01')
+    expect(markup).toContain('Expand All')
+    expect(markup).toContain('Collapse All')
     expect(markup).not.toContain('—')
+  })
+
+  it('maps Built completion to unavailable, red, amber, and green states', () => {
+    expect(getBuiltCompletionState(undefined, 4)).toBe('unavailable')
+    expect(getBuiltCompletionState(0, 4)).toBe('none')
+    expect(getBuiltCompletionState(0, null)).toBe('none')
+    expect(getBuiltCompletionState(2, 4)).toBe('partial')
+    expect(getBuiltCompletionState(4, 4)).toBe('complete')
+    expect(getBuiltCompletionState(5, 4)).toBe('complete')
+  })
+
+  it('resizes only the requested column and enforces the minimum width', () => {
+    expect(setReportColumnWidth([100, 120, 140], 1, 175)).toEqual([100, 175, 140])
+    expect(setReportColumnWidth([100, 120, 140], 1, 10)).toEqual([
+      100,
+      MIN_REPORT_COLUMN_WIDTH,
+      140
+    ])
+  })
+
+  it('shows only the Work Order status label without the NetSuite record-type prefix', () => {
+    expect(displayWorkOrderStatus('Work Order : In Process')).toBe('In Process')
+    expect(displayWorkOrderStatus('work order: Released')).toBe('Released')
+    expect(displayWorkOrderStatus('Complete')).toBe('Complete')
+    expect(displayWorkOrderStatus('Work Order : No Work Order')).toBe('')
   })
 
   it('renders Sales Order-level paging controls', () => {

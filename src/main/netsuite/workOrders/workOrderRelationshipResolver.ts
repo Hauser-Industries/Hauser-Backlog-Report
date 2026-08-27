@@ -5,14 +5,17 @@ import type { SuiteQlClient } from '../client/suiteQlClient'
 import type { DiagnosticLogger } from '../diagnostics/sanitizedLogger'
 import { netSuiteDiagnosticLogger } from '../diagnostics/sanitizedLogger'
 import type { SuiteQlQuery, SuiteQlRecord } from '../types/netsuiteTypes'
+import type { WorkOrderBuiltProvider } from './workOrderBuiltProvider'
 
 const scalar = z.union([z.string(), z.number(), z.null()])
+const REST_BUILT_LOOKUP_CONCURRENCY = 4
 
 export interface WorkOrderSummary {
   internalId: string
   number: string
   statusRaw?: string
   status?: string
+  built?: number
 }
 
 export type WorkOrderRelationship = 'NextTransactionLineLink' | 'WOLine.CreatedFrom' | 'none'
@@ -174,7 +177,8 @@ export class NetSuiteWorkOrderRelationshipResolver implements WorkOrderRelations
 
   constructor(
     private readonly suiteQlClient: SuiteQlClient,
-    logger: DiagnosticLogger = netSuiteDiagnosticLogger
+    logger: DiagnosticLogger = netSuiteDiagnosticLogger,
+    private readonly builtProvider?: WorkOrderBuiltProvider
   ) {
     this.logger = logger
   }
@@ -198,7 +202,7 @@ export class NetSuiteWorkOrderRelationshipResolver implements WorkOrderRelations
             matchedLineCount: resolution.bySalesOrderLine.size,
             ambiguousLineCount: resolution.ambiguousLineKeys.size
           })
-          return resolution
+          return this.attachRestBuilt(resolution)
         }
         this.logger.warn('NextTransactionLineLink did not match current Sales Order line IDs.', {
           endpointCategory: 'work-order-lookup',
@@ -223,13 +227,50 @@ export class NetSuiteWorkOrderRelationshipResolver implements WorkOrderRelations
         matchedLineCount: resolution.bySalesOrderLine.size,
         ambiguousLineCount: resolution.ambiguousLineKeys.size
       })
-      return resolution
+      return this.attachRestBuilt(resolution)
     } catch {
       this.logger.warn('CreatedFrom Work Order lookup failed.', {
         endpointCategory: 'work-order-lookup',
         salesOrderCount: salesOrderIds.length
       })
       return emptyResolution(false)
+    }
+  }
+
+  private async attachRestBuilt(resolution: WorkOrderResolution): Promise<WorkOrderResolution> {
+    if (!this.builtProvider) return resolution
+    const workOrdersById = new Map(
+      [...resolution.bySalesOrderLine.values()].map((workOrder) => [workOrder.internalId, workOrder])
+    )
+    if (workOrdersById.size === 0) return resolution
+
+    const builtByInternalId = new Map<string, number>()
+    const workOrders = [...workOrdersById.values()]
+    for (let index = 0; index < workOrders.length; index += REST_BUILT_LOOKUP_CONCURRENCY) {
+      const batch = workOrders.slice(index, index + REST_BUILT_LOOKUP_CONCURRENCY)
+      const values = await Promise.all(
+        batch.map(async (workOrder) => {
+          try {
+            return await this.builtProvider!.getBuilt(workOrder.internalId, workOrder.number)
+          } catch {
+            return null
+          }
+        })
+      )
+      values.forEach((built, batchIndex) => {
+        if (built !== null) builtByInternalId.set(batch[batchIndex]!.internalId, built)
+      })
+    }
+
+    if (builtByInternalId.size === 0) return resolution
+    return {
+      ...resolution,
+      bySalesOrderLine: new Map(
+        [...resolution.bySalesOrderLine].map(([lineKey, workOrder]) => {
+          const built = builtByInternalId.get(workOrder.internalId)
+          return [lineKey, built === undefined ? workOrder : { ...workOrder, built }]
+        })
+      )
     }
   }
 

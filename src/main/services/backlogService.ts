@@ -5,7 +5,9 @@ import type {
   BacklogResponse,
   SalesOrderGroup,
   SalesOrderDetailsResult,
-  SalesOrderSearchRequest
+  SalesOrderSearchRequest,
+  WorkOrderBuiltRequest,
+  WorkOrderBuiltResult
 } from '@shared/types/backlog'
 import { isAllowedCustomer } from '@shared/constants/customers'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
@@ -27,6 +29,17 @@ export class BacklogService {
 
   async getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult> {
     return this.dataSource.getSalesOrderDetails(salesOrderInternalId)
+  }
+
+  async getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult> {
+    if (this.dataSource.getWorkOrderBuilt) return this.dataSource.getWorkOrderBuilt(request)
+    return {
+      success: true,
+      values: request.workOrders.map(({ workOrderInternalId }) => ({
+        workOrderInternalId,
+        built: null
+      }))
+    }
   }
 
   async searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse> {

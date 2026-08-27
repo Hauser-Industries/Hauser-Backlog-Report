@@ -630,6 +630,7 @@ export function App() {
                     onLoadDetails={(salesOrderInternalId) =>
                       window.hauserBacklog.getSalesOrderDetails({ salesOrderInternalId })
                     }
+                    onLoadBuilt={(request) => window.hauserBacklog.getWorkOrderBuilt(request)}
                   />
                 </div>
               ) : null}

@@ -3,6 +3,7 @@ export const IPC_CHANNELS = {
   searchSalesOrder: 'backlog:search-sales-order',
   refreshBacklog: 'backlog:refresh',
   getSalesOrderDetails: 'backlog:sales-order-details',
+  getWorkOrderBuilt: 'backlog:work-order-built',
   getConnectionStatus: 'connection:status',
   signIn: 'auth:sign-in',
   signOut: 'auth:sign-out',

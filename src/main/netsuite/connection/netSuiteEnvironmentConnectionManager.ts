@@ -7,7 +7,9 @@ import type {
   NetSuiteRestConnectionOutcome,
   NetSuiteSuiteQlOutcome,
   ResolveCustomerIdsOutcome,
-  SalesOrderDetailsResult
+  SalesOrderDetailsResult,
+  WorkOrderBuiltRequest,
+  WorkOrderBuiltResult
 } from '@shared/types/backlog'
 import type { NetSuiteEnvironmentProfile } from '../config/environmentProfiles'
 
@@ -15,6 +17,7 @@ export interface NetSuiteEnvironmentSession {
   getBacklog(filter: BacklogFilter): Promise<BacklogPageData>
   getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
+  getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
   invalidateDetails(): void
   getStatus(): Promise<ConnectionStatus>
   signIn(): Promise<void>
@@ -63,6 +66,10 @@ export class NetSuiteEnvironmentConnectionManager {
 
   async getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult> {
     return this.activeSession.getSalesOrderDetails(salesOrderInternalId)
+  }
+
+  async getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult> {
+    return this.activeSession.getWorkOrderBuilt(request)
   }
 
   invalidateDetails(): void {
