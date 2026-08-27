@@ -15,8 +15,6 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
               line: 1,
               custcol_nscs_paintreplacementsku: { id: '50', refName: 'PAINT-BLACK' },
               custcol_nscs_fabricreplacementsku: { id: '51', refName: 'FABRIC-SLATE' },
-              custcol_nscs_weltreplacement: { id: '52', refName: 'WELT-SLATE' },
-              custcol_nscs_buttonreplacement: { id: '53', refName: 'BUTTON-BLACK' },
               createwo: true
             }
           ]
@@ -34,19 +32,9 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
           item_internal_id: '51',
           item_name: 'FABRIC-SLATE',
           item_description: 'Slate fabric'
-        },
-        {
-          item_internal_id: '52',
-          item_name: 'WELT-SLATE',
-          item_description: 'Slate welt'
-        },
-        {
-          item_internal_id: '53',
-          item_name: 'BUTTON-BLACK',
-          item_description: 'Black button'
         }
       ],
-      totalResults: 4,
+      totalResults: 2,
       pages: 1
     }))
     const provider = new NetSuiteSalesOrderDetailProvider(
@@ -70,11 +58,7 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
           paintName: 'PAINT-BLACK',
           paintDescription: 'Black powder coat',
           fabricName: 'FABRIC-SLATE',
-          fabricDescription: 'Slate fabric',
-          weltName: 'WELT-SLATE',
-          weltDescription: 'Slate welt',
-          buttonName: 'BUTTON-BLACK',
-          buttonDescription: 'Black button'
+          fabricDescription: 'Slate fabric'
         }
       ]
     })
@@ -83,7 +67,7 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
     expect(queryAll).toHaveBeenCalledOnce()
     expect(queryAll).toHaveBeenCalledWith(
       expect.objectContaining({
-        sql: expect.stringContaining('WHERE id IN (50, 51, 52, 53)')
+        sql: expect.stringContaining('WHERE id IN (50, 51)')
       })
     )
   })
@@ -102,8 +86,7 @@ describe('NetSuiteSalesOrderDetailProvider', () => {
 
     await expect(provider.getDetails('10144')).resolves.toEqual({
       success: false,
-      message:
-        'Optional Paint, Fabric, Welt, and Button details are unavailable for this Sales Order.'
+      message: 'Optional Paint and Fabric details are unavailable for this Sales Order.'
     })
   })
 

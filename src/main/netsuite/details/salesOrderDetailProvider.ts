@@ -9,7 +9,7 @@ import { netSuiteDiagnosticLogger } from '../diagnostics/sanitizedLogger'
 const restRecordSchema = z.record(z.string(), z.unknown())
 
 type UnknownRecord = Record<string, unknown>
-type ReplacementKind = 'paint' | 'fabric' | 'welt' | 'button'
+type ReplacementKind = 'paint' | 'fabric'
 
 interface ReplacementReference {
   id?: string
@@ -82,9 +82,7 @@ function pendingLineDetail(line: UnknownRecord): PendingLineDetail | undefined {
 
   const replacements = {
     paint: replacementReference(line.custcol_nscs_paintreplacementsku),
-    fabric: replacementReference(line.custcol_nscs_fabricreplacementsku),
-    welt: replacementReference(line.custcol_nscs_weltreplacement),
-    button: replacementReference(line.custcol_nscs_buttonreplacement)
+    fabric: replacementReference(line.custcol_nscs_fabricreplacementsku)
   }
 
   return {
@@ -92,9 +90,7 @@ function pendingLineDetail(line: UnknownRecord): PendingLineDetail | undefined {
       ...(lineId ? { lineId } : {}),
       ...(lineSequence !== undefined ? { lineSequence } : {}),
       ...(replacements.paint?.name ? { paintName: replacements.paint.name } : {}),
-      ...(replacements.fabric?.name ? { fabricName: replacements.fabric.name } : {}),
-      ...(replacements.welt?.name ? { weltName: replacements.welt.name } : {}),
-      ...(replacements.button?.name ? { buttonName: replacements.button.name } : {})
+      ...(replacements.fabric?.name ? { fabricName: replacements.fabric.name } : {})
     },
     replacements
   }
@@ -149,8 +145,7 @@ export class NetSuiteSalesOrderDetailProvider {
     } catch {
       return {
         success: false,
-        message:
-          'Optional Paint, Fabric, Welt, and Button details are unavailable for this Sales Order.'
+        message: 'Optional Paint and Fabric details are unavailable for this Sales Order.'
       }
     }
   }
@@ -217,19 +212,14 @@ WHERE id IN (${numericIdList(uniqueIds)})`
       } else if (kind === 'fabric') {
         if (name) result.fabricName = name
         if (resolved?.description) result.fabricDescription = resolved.description
-      } else if (kind === 'welt') {
-        if (name) result.weltName = name
-        if (resolved?.description) result.weltDescription = resolved.description
       } else {
-        if (name) result.buttonName = name
-        if (resolved?.description) result.buttonDescription = resolved.description
+        if (name) result.fabricName = name
+        if (resolved?.description) result.fabricDescription = resolved.description
       }
     }
 
     merge('paint')
     merge('fabric')
-    merge('welt')
-    merge('button')
     return result
   }
 }

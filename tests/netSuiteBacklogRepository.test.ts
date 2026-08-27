@@ -58,7 +58,7 @@ describe('NetSuiteBacklogRepository two-stage paging', () => {
     const page = await repository.getBacklog({ page: 1, pageSize: 50 })
 
     expect(executeSuiteQL).toHaveBeenCalledWith(
-      expect.stringContaining('ORDER BY t.createddate DESC, t.id DESC'),
+      expect.stringContaining('ORDER BY t.createddate ASC, t.id ASC'),
       expect.objectContaining({ limit: 50, offset: 50 })
     )
     expect(queryAll).toHaveBeenCalledWith(

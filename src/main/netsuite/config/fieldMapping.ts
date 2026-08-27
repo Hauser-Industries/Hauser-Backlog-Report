@@ -16,8 +16,6 @@ export type NetSuiteMappingKey =
   | 'itemDescription'
   | 'paintName'
   | 'fabricName'
-  | 'weltName'
-  | 'buttonName'
   | 'quantity'
   | 'createdDate'
   | 'dueDate'
@@ -90,16 +88,6 @@ export const NETSUITE_FIELD_MAPPING: NetSuiteFieldMapping = {
   fabricName: {
     status: 'verify',
     suiteQlExpression: 'tl.custcol_nscs_fabricreplacementsku',
-    note: 'Verified replacement field ID; Item description precedence remains under live inspection.'
-  },
-  weltName: {
-    status: 'verify',
-    suiteQlExpression: 'tl.custcol_nscs_weltreplacement',
-    note: 'Verified replacement field ID; Item description precedence remains under live inspection.'
-  },
-  buttonName: {
-    status: 'verify',
-    suiteQlExpression: 'tl.custcol_nscs_buttonreplacement',
     note: 'Verified replacement field ID; Item description precedence remains under live inspection.'
   },
   quantity: {

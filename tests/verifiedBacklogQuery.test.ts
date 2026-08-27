@@ -9,13 +9,13 @@ describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
     getNetSuiteEnvironmentProfileByEnvironment('production')
   )
 
-  it('loads only the six configured Production customers newest first', () => {
+  it('loads only the six configured Production customers oldest first', () => {
     const query = factory.createBacklogQuery({})
 
     expect(query.name).toBe('hauser-backlog-sales-order-headers')
     expect(query.sql).toContain('t.entity IN (1432, 1446, 1578, 5602, 5625, 6344)')
     expect(query.sql).not.toMatch(/\b226\b|\b5601\b/)
-    expect(query.sql).toContain('ORDER BY t.createddate DESC, t.id DESC')
+    expect(query.sql).toContain('ORDER BY t.createddate ASC, t.id ASC')
   })
 
   it('applies the selected customer by its configured internal ID', () => {

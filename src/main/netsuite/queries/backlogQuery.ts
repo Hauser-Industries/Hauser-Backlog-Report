@@ -44,7 +44,7 @@ WHERE t.type = 'SalesOrd'
     AND NVL(tl.isclosed, 'F') = 'F'
     AND tl.item IS NOT NULL
     AND ${whereClause}
-ORDER BY t.createddate DESC, t.id DESC, tl.linesequencenumber, tl.id`
+ORDER BY t.createddate ASC, t.id ASC, tl.linesequencenumber, tl.id`
 }
 
 function salesOrderHeaderQuery(whereClause: string): string {
@@ -59,7 +59,7 @@ function salesOrderHeaderQuery(whereClause: string): string {
 FROM transaction t
 WHERE t.type = 'SalesOrd'
     AND ${whereClause}
-ORDER BY t.createddate DESC, t.id DESC`
+ORDER BY t.createddate ASC, t.id ASC`
 }
 
 function salesOrderLineQuery(salesOrderInternalIds: readonly string[]): string {

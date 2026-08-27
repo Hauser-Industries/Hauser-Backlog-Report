@@ -40,7 +40,7 @@ interface DetailState {
 }
 
 const DEFAULT_COLUMN_WIDTHS = [
-  260, 125, 115, 125, 230, 180, 190, 180, 180, 100, 100, 125, 165, 120, 120
+  260, 125, 115, 125, 230, 180, 190, 100, 100, 125, 165, 120, 120
 ] as const
 
 interface ColumnResizeState {
@@ -337,7 +337,7 @@ export function BacklogTable({
                       </button>
                     </td>
                     <td>{displayText(salesOrder.poNumber)}</td>
-                    {Array.from({ length: 10 }, (_, index) => (
+                    {Array.from({ length: 8 }, (_, index) => (
                       <td key={`parent-empty-${index}`} />
                     ))}
                     <td>{displayDate(salesOrder.createdDate)}</td>
@@ -366,8 +366,6 @@ export function BacklogTable({
                             <td>{displayText(item.itemDescription)}</td>
                             <td>{displayText(item.paintDescription)}</td>
                             <td>{displayText(item.fabricDescription)}</td>
-                            <td>{displayText(item.weltDescription)}</td>
-                            <td>{displayText(item.buttonDescription)}</td>
                             <td>
                               <span className="numeric numeric--emphasis">
                                 {formatQuantity(item.quantity)}

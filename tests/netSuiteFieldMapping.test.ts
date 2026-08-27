@@ -21,19 +21,15 @@ describe('NETSUITE_FIELD_MAPPING live evidence', () => {
     expect(NETSUITE_FIELD_MAPPING).not.toHaveProperty('quantityRemaining')
   })
 
-  it('records the four verified replacement field IDs and no child-WO mapping', () => {
+  it('records only the required replacement field IDs and no child-WO mapping', () => {
     expect(NETSUITE_FIELD_MAPPING.paintName.suiteQlExpression).toBe(
       'tl.custcol_nscs_paintreplacementsku'
     )
     expect(NETSUITE_FIELD_MAPPING.fabricName.suiteQlExpression).toBe(
       'tl.custcol_nscs_fabricreplacementsku'
     )
-    expect(NETSUITE_FIELD_MAPPING.weltName.suiteQlExpression).toBe(
-      'tl.custcol_nscs_weltreplacement'
-    )
-    expect(NETSUITE_FIELD_MAPPING.buttonName.suiteQlExpression).toBe(
-      'tl.custcol_nscs_buttonreplacement'
-    )
+    expect(NETSUITE_FIELD_MAPPING).not.toHaveProperty('weltName')
+    expect(NETSUITE_FIELD_MAPPING).not.toHaveProperty('buttonName')
     expect(NETSUITE_FIELD_MAPPING.topLevelWorkOrderRelationship.suiteQlExpression).toBe(
       'tl.createwo'
     )

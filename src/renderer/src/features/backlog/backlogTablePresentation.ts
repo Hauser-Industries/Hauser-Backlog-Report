@@ -6,8 +6,6 @@ export const BACKLOG_TABLE_HEADERS = [
   'Item Description',
   'Paint Description',
   'Fabric Description',
-  'Welt Description',
-  'Button Description',
   'Sum of Qty.',
   'Built',
   'Work Order #',

@@ -56,8 +56,6 @@ describe('BacklogTable grouped report contract', () => {
       'Item Description',
       'Paint Description',
       'Fabric Description',
-      'Welt Description',
-      'Button Description',
       'Sum of Qty.',
       'Built',
       'Work Order #',
@@ -67,8 +65,8 @@ describe('BacklogTable grouped report contract', () => {
     ]
 
     expect(BACKLOG_TABLE_HEADERS).toEqual(expectedHeaders)
-    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(15)
-    expect(markup.match(/role="separator"/g)).toHaveLength(15)
+    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(13)
+    expect(markup.match(/role="separator"/g)).toHaveLength(13)
     let priorIndex = -1
     for (const header of expectedHeaders) {
       const index = markup.indexOf(header)
@@ -78,7 +76,7 @@ describe('BacklogTable grouped report contract', () => {
     expect(markup).toContain('WATERLOO - HAUSER COMPANY STORES')
     expect(markup).toContain('SO1234')
     expect(markup).not.toContain('Ship To')
-    expect(markup).not.toMatch(/Paint Name|Fabric Name|Welt Name|Button Name/)
+    expect(markup).not.toMatch(/Paint Name|Fabric Name|Welt|Button/)
     expect(markup).not.toMatch(/Qty Shipped|Qty Remaining/i)
     expect(markup).toContain('class="sales-order-expand-button"')
     expect(markup).toContain('aria-expanded="false"')
