@@ -13,6 +13,9 @@ export interface BacklogQueryFactory {
   createSalesOrderLineQuery(salesOrderInternalIds: readonly string[]): SuiteQlQuery
 }
 
+const EXCLUDED_SALES_ORDER_STATUS_FILTER =
+  "BUILTIN.CF(t.status) NOT IN ('SalesOrd:C', 'SalesOrd:F', 'SalesOrd:G', 'SalesOrd:H')"
+
 function numericIdList(ids: readonly string[]): string {
   const uniqueIds = [...new Set(ids)]
   if (uniqueIds.length === 0 || uniqueIds.some((id) => !/^[0-9]+$/.test(id))) {
@@ -39,6 +42,7 @@ FROM transaction t
 INNER JOIN transactionline tl
     ON tl.transaction = t.id
 WHERE t.type = 'SalesOrd'
+    AND ${EXCLUDED_SALES_ORDER_STATUS_FILTER}
     AND NVL(tl.mainline, 'F') = 'F'
     AND NVL(tl.taxline, 'F') = 'F'
     AND NVL(tl.isclosed, 'F') = 'F'
@@ -58,6 +62,7 @@ function salesOrderHeaderQuery(whereClause: string): string {
     t.custbody_nscs_duedatebal AS due_date
 FROM transaction t
 WHERE t.type = 'SalesOrd'
+    AND ${EXCLUDED_SALES_ORDER_STATUS_FILTER}
     AND ${whereClause}
 ORDER BY t.createddate ASC, t.id ASC`
 }

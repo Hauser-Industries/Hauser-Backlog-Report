@@ -30,3 +30,18 @@ describe('unknown work-order statuses', () => {
     expect(getStatusTone(record?.statusLabel)).toBe('neutral')
   })
 })
+
+describe('work-order status colors', () => {
+  it.each([
+    ['Built', 'complete'],
+    ['Closed', 'complete'],
+    ['Cancelled', 'cancelled'],
+    ['Canceled', 'cancelled'],
+    ['Planned', 'cancelled'],
+    ['Released', 'cancelled'],
+    ['In Process', 'planned'],
+    ['Work Order : In Process', 'planned']
+  ] as const)('maps %s to the expected color tone', (status, expectedTone) => {
+    expect(getStatusTone(status)).toBe(expectedTone)
+  })
+})

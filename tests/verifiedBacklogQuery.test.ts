@@ -5,6 +5,8 @@ import { VerifiedBacklogQueryFactory } from '../src/main/netsuite/queries/backlo
 import { InvalidSalesOrderNumberError } from '../src/shared/utils/salesOrder'
 
 describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
+  const excludedSalesOrderStatusFilter =
+    "BUILTIN.CF(t.status) NOT IN ('SalesOrd:C', 'SalesOrd:F', 'SalesOrd:G', 'SalesOrd:H')"
   const factory = new VerifiedBacklogQueryFactory(
     getNetSuiteEnvironmentProfileByEnvironment('production')
   )
@@ -15,6 +17,7 @@ describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
     expect(query.name).toBe('hauser-backlog-sales-order-headers')
     expect(query.sql).toContain('t.entity IN (1432, 1446, 1578, 5602, 5625, 6344)')
     expect(query.sql).not.toMatch(/\b226\b|\b5601\b/)
+    expect(query.sql).toContain(excludedSalesOrderStatusFilter)
     expect(query.sql).toContain('ORDER BY t.createddate ASC, t.id ASC')
   })
 
@@ -33,7 +36,15 @@ describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
     expect(query.sql).toContain("UPPER(t.tranid) = 'SO10144'")
     expect(query.sql).toContain('t.custbody_nscs_duedatebal AS due_date')
     expect(query.sql).toContain('tl.quantity AS quantity')
+    expect(query.sql).toContain(excludedSalesOrderStatusFilter)
     expect(query.sql).not.toMatch(/custcol_nscs_|createwo|type = 'WorkOrd'/i)
+  })
+
+  it('excludes terminal and billing-complete Sales Orders from exact header searches', () => {
+    const query = factory.createExactSalesOrderHeaderQuery('SO10144')
+
+    expect(query.sql).toContain(excludedSalesOrderStatusFilter)
+    expect(query.sql).toContain("UPPER(t.tranid) = 'SO10144'")
   })
 
   it('creates a separate line query for validated current-page Sales Order IDs', () => {
