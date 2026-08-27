@@ -4,6 +4,7 @@ export const IPC_CHANNELS = {
   refreshBacklog: 'backlog:refresh',
   getSalesOrderDetails: 'backlog:sales-order-details',
   getWorkOrderBuilt: 'backlog:work-order-built',
+  getWorkOrderPainted: 'backlog:work-order-painted',
   getConnectionStatus: 'connection:status',
   signIn: 'auth:sign-in',
   signOut: 'auth:sign-out',

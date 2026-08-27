@@ -3,7 +3,9 @@ import type {
   BacklogPageData,
   SalesOrderDetailsResult,
   WorkOrderBuiltRequest,
-  WorkOrderBuiltResult
+  WorkOrderBuiltResult,
+  WorkOrderPaintedRequest,
+  WorkOrderPaintedResult
 } from '@shared/types/backlog'
 
 /**
@@ -16,5 +18,6 @@ export interface BacklogDataSource {
   getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt?(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
+  getWorkOrderPainted?(request: WorkOrderPaintedRequest): Promise<WorkOrderPaintedResult>
   invalidateDetails?(): void
 }

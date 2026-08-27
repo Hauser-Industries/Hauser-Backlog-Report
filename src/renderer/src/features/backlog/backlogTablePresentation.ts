@@ -8,6 +8,7 @@ export const BACKLOG_TABLE_HEADERS = [
   'Fabric Description',
   'Sum of Qty.',
   'Built',
+  'Painted',
   'Work Order #',
   'WO Status',
   'Created Date',
@@ -34,6 +35,23 @@ export function getBuiltCompletionState(
     return 'unavailable'
   }
   return built >= quantity ? 'complete' : 'partial'
+}
+
+export function shouldLoadPainted(
+  paintSku: string | null | undefined,
+  built: number | null | undefined,
+  quantity: number | null | undefined
+): boolean {
+  return Boolean(
+    paintSku?.trim() &&
+      built !== null &&
+      built !== undefined &&
+      Number.isFinite(built) &&
+      quantity !== null &&
+      quantity !== undefined &&
+      Number.isFinite(quantity) &&
+      built < quantity
+  )
 }
 
 export function setReportColumnWidth(

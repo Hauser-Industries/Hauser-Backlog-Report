@@ -631,6 +631,7 @@ export function App() {
                       window.hauserBacklog.getSalesOrderDetails({ salesOrderInternalId })
                     }
                     onLoadBuilt={(request) => window.hauserBacklog.getWorkOrderBuilt(request)}
+                    onLoadPainted={(request) => window.hauserBacklog.getWorkOrderPainted(request)}
                   />
                 </div>
               ) : null}

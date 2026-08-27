@@ -164,6 +164,25 @@ export interface WorkOrderBuiltResult {
   values: WorkOrderBuiltValue[]
 }
 
+export interface WorkOrderPaintedReference {
+  workOrderInternalId: string
+  workOrderNumber: string
+}
+
+export interface WorkOrderPaintedRequest {
+  workOrders: WorkOrderPaintedReference[]
+}
+
+export interface WorkOrderPaintedValue {
+  workOrderInternalId: string
+  painted: number | null
+}
+
+export interface WorkOrderPaintedResult {
+  success: true
+  values: WorkOrderPaintedValue[]
+}
+
 export type SalesOrderDetailsResult =
   | {
       success: true
@@ -396,6 +415,7 @@ export interface HauserBacklogApi {
   refreshBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   getSalesOrderDetails(request: SalesOrderDetailsRequest): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
+  getWorkOrderPainted(request: WorkOrderPaintedRequest): Promise<WorkOrderPaintedResult>
   getConnectionStatus(): Promise<ConnectionStatus>
   signIn(): Promise<ConnectionStatus>
   signOut(): Promise<ConnectionStatus>

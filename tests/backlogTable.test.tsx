@@ -7,7 +7,8 @@ import {
   displayWorkOrderStatus,
   getBuiltCompletionState,
   MIN_REPORT_COLUMN_WIDTH,
-  setReportColumnWidth
+  setReportColumnWidth,
+  shouldLoadPainted
 } from '../src/renderer/src/features/backlog/backlogTablePresentation'
 import type { SalesOrderGroup } from '../src/shared/types/backlog'
 
@@ -40,7 +41,8 @@ const sharedProps = {
   hasNext: false,
   onPageChange: () => undefined,
   onLoadDetails: async () => ({ success: true as const, items: [] }),
-  onLoadBuilt: async () => ({ success: true as const, values: [] })
+  onLoadBuilt: async () => ({ success: true as const, values: [] }),
+  onLoadPainted: async () => ({ success: true as const, values: [] })
 }
 
 describe('BacklogTable grouped report contract', () => {
@@ -58,6 +60,7 @@ describe('BacklogTable grouped report contract', () => {
       'Fabric Description',
       'Sum of Qty.',
       'Built',
+      'Painted',
       'Work Order #',
       'WO Status',
       'Created Date',
@@ -65,8 +68,8 @@ describe('BacklogTable grouped report contract', () => {
     ]
 
     expect(BACKLOG_TABLE_HEADERS).toEqual(expectedHeaders)
-    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(13)
-    expect(markup.match(/role="separator"/g)).toHaveLength(13)
+    expect(markup.match(/<th(?:\s|>)/g)).toHaveLength(14)
+    expect(markup.match(/role="separator"/g)).toHaveLength(14)
     let priorIndex = -1
     for (const header of expectedHeaders) {
       const index = markup.indexOf(header)
@@ -93,6 +96,15 @@ describe('BacklogTable grouped report contract', () => {
     expect(getBuiltCompletionState(2, 4)).toBe('partial')
     expect(getBuiltCompletionState(4, 4)).toBe('complete')
     expect(getBuiltCompletionState(5, 4)).toBe('complete')
+  })
+
+  it('loads Painted only for paint-bearing lines whose top-level Work Order is incomplete', () => {
+    expect(shouldLoadPainted('PAINT-BLACK', 0, 4)).toBe(true)
+    expect(shouldLoadPainted('PAINT-BLACK', 2, 4)).toBe(true)
+    expect(shouldLoadPainted('PAINT-BLACK', 4, 4)).toBe(false)
+    expect(shouldLoadPainted('', 2, 4)).toBe(false)
+    expect(shouldLoadPainted(undefined, 2, 4)).toBe(false)
+    expect(shouldLoadPainted('PAINT-BLACK', null, 4)).toBe(false)
   })
 
   it('resizes only the requested column and enforces the minimum width', () => {

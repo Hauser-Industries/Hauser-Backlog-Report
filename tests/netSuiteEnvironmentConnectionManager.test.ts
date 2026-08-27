@@ -72,6 +72,15 @@ function createSessionFactory(records: SessionRecord[]) {
           }))
         }
       },
+      async getWorkOrderPainted(request) {
+        return {
+          success: true,
+          values: request.workOrders.map(({ workOrderInternalId }) => ({
+            workOrderInternalId,
+            painted: null
+          }))
+        }
+      },
       invalidateDetails(): void {},
       async getStatus(): Promise<ConnectionStatus> {
         return {

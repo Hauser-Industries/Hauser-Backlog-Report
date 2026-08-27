@@ -10,6 +10,7 @@ const api: HauserBacklogApi = {
   refreshBacklog: (filter) => ipcRenderer.invoke(IPC_CHANNELS.refreshBacklog, filter),
   getSalesOrderDetails: (request) => ipcRenderer.invoke(IPC_CHANNELS.getSalesOrderDetails, request),
   getWorkOrderBuilt: (request) => ipcRenderer.invoke(IPC_CHANNELS.getWorkOrderBuilt, request),
+  getWorkOrderPainted: (request) => ipcRenderer.invoke(IPC_CHANNELS.getWorkOrderPainted, request),
   getConnectionStatus: () => ipcRenderer.invoke(IPC_CHANNELS.getConnectionStatus),
   signIn: () => ipcRenderer.invoke(IPC_CHANNELS.signIn),
   signOut: () => ipcRenderer.invoke(IPC_CHANNELS.signOut),

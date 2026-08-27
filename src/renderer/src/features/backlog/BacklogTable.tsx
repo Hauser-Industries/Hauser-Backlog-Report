@@ -6,7 +6,9 @@ import type {
   SalesOrderGroup,
   SalesOrderItemDetail,
   WorkOrderBuiltRequest,
-  WorkOrderBuiltResult
+  WorkOrderBuiltResult,
+  WorkOrderPaintedRequest,
+  WorkOrderPaintedResult
 } from '@shared/types/backlog'
 import { formatDate } from '@shared/utils/date'
 import { formatQuantity } from '@shared/utils/quantity'
@@ -17,7 +19,8 @@ import {
   getBuiltCompletionState,
   MIN_REPORT_COLUMN_WIDTH,
   setReportColumnWidth,
-  displayWorkOrderStatus
+  displayWorkOrderStatus,
+  shouldLoadPainted
 } from './backlogTablePresentation'
 
 interface BacklogTableProps {
@@ -30,17 +33,19 @@ interface BacklogTableProps {
   onPageChange: (page: number) => void
   onLoadDetails: (salesOrderInternalId: string) => Promise<SalesOrderDetailsResult>
   onLoadBuilt: (request: WorkOrderBuiltRequest) => Promise<WorkOrderBuiltResult>
+  onLoadPainted: (request: WorkOrderPaintedRequest) => Promise<WorkOrderPaintedResult>
 }
 
 interface DetailState {
   loading: boolean
   items: SalesOrderItemDetail[]
   builtByWorkOrder: Record<string, number | null>
+  paintedByWorkOrder: Record<string, number | null>
   error?: string
 }
 
 const DEFAULT_COLUMN_WIDTHS = [
-  260, 125, 115, 125, 230, 180, 190, 100, 100, 125, 165, 120, 120
+  260, 125, 115, 125, 230, 180, 190, 100, 100, 100, 125, 165, 120, 120
 ] as const
 
 interface ColumnResizeState {
@@ -85,7 +90,8 @@ export function BacklogTable({
   hasNext,
   onPageChange,
   onLoadDetails,
-  onLoadBuilt
+  onLoadBuilt,
+  onLoadPainted
 }: BacklogTableProps) {
   const [expandedSalesOrders, setExpandedSalesOrders] = useState<Set<string>>(() => new Set())
   const [detailBySalesOrder, setDetailBySalesOrder] = useState<Record<string, DetailState>>({})
@@ -145,7 +151,7 @@ export function BacklogTable({
 
     setDetailBySalesOrder((current) => ({
       ...current,
-      [id]: { loading: true, items: [], builtByWorkOrder: {} }
+      [id]: { loading: true, items: [], builtByWorkOrder: {}, paintedByWorkOrder: {} }
     }))
     const workOrders = [
       ...new Map(
@@ -175,13 +181,46 @@ export function BacklogTable({
     const builtByWorkOrder = Object.fromEntries(
       builtValues.map(({ workOrderInternalId, built }) => [workOrderInternalId, built])
     )
+    const detailItems = details?.success ? details.items : []
+    const paintedWorkOrders = [
+      ...new Map(
+        salesOrder.items.flatMap((basicItem) => {
+          const item = mergeItem(basicItem, detailItems)
+          if (!item.workOrderInternalId || !item.workOrderNumber) return []
+          const built = Object.hasOwn(builtByWorkOrder, item.workOrderInternalId)
+            ? builtByWorkOrder[item.workOrderInternalId]
+            : item.built
+          return shouldLoadPainted(item.paintName, built, item.quantity)
+            ? [
+                [
+                  item.workOrderInternalId,
+                  {
+                    workOrderInternalId: item.workOrderInternalId,
+                    workOrderNumber: item.workOrderNumber
+                  }
+                ] as const
+              ]
+            : []
+        })
+      ).values()
+    ]
+    const paintedOutcome =
+      paintedWorkOrders.length === 0
+        ? undefined
+        : await Promise.allSettled([onLoadPainted({ workOrders: paintedWorkOrders })])
+    const paintedValues =
+      paintedOutcome?.[0]?.status === 'fulfilled' ? paintedOutcome[0].value.values : []
+    const paintedByWorkOrder = Object.fromEntries(
+      paintedValues.map(({ workOrderInternalId, painted }) => [workOrderInternalId, painted])
+    )
 
     setDetailBySalesOrder((current) => ({
       ...current,
       [id]: {
         loading: false,
-        items: details?.success ? details.items : [],
+        items: detailItems,
         builtByWorkOrder,
+        paintedByWorkOrder,
         ...(!details || !details.success
           ? {
               error:
@@ -337,7 +376,7 @@ export function BacklogTable({
                       </button>
                     </td>
                     <td>{displayText(salesOrder.poNumber)}</td>
-                    {Array.from({ length: 8 }, (_, index) => (
+                    {Array.from({ length: 9 }, (_, index) => (
                       <td key={`parent-empty-${index}`} />
                     ))}
                     <td>{displayDate(salesOrder.createdDate)}</td>
@@ -355,6 +394,15 @@ export function BacklogTable({
                           hasLoadedBuilt && item.workOrderInternalId
                             ? detailState?.builtByWorkOrder[item.workOrderInternalId]
                             : item.built
+                        const painted =
+                          item.workOrderInternalId &&
+                          detailState &&
+                          Object.hasOwn(
+                            detailState.paintedByWorkOrder,
+                            item.workOrderInternalId
+                          )
+                            ? detailState.paintedByWorkOrder[item.workOrderInternalId]
+                            : undefined
                         return (
                           <tr className="report-row sales-order-item-row" key={item.rowKey}>
                             <td />
@@ -378,6 +426,17 @@ export function BacklogTable({
                                 {built === undefined || built === null || !Number.isFinite(built)
                                   ? '—'
                                   : formatQuantity(built)}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`built-value numeric built-value--${getBuiltCompletionState(painted, item.quantity)}`}
+                              >
+                                {painted === undefined ||
+                                painted === null ||
+                                !Number.isFinite(painted)
+                                  ? ''
+                                  : formatQuantity(painted)}
                               </span>
                             </td>
                             <td>{displayText(item.workOrderNumber)}</td>
