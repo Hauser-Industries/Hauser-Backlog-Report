@@ -3,6 +3,7 @@ import type {
   BacklogFilter,
   BacklogPageData,
   BacklogResponse,
+  PurchaseOrderSearchRequest,
   SalesOrderGroup,
   SalesOrderDetailsResult,
   SalesOrderSearchRequest,
@@ -13,6 +14,7 @@ import type {
 } from '@shared/types/backlog'
 import { isAllowedCustomer } from '@shared/constants/customers'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
+import { normalizePurchaseOrderNumber } from '@shared/utils/purchaseOrder'
 
 export class BacklogService {
   constructor(
@@ -61,6 +63,41 @@ export class BacklogService {
     const page = await this.dataSource.getSalesOrder(salesOrderNumber)
     const exactSalesOrders = page.salesOrders.filter(
       (salesOrder) => salesOrder.salesOrderNumber.toUpperCase() === salesOrderNumber
+    )
+
+    if (exactSalesOrders.length === 0) return this.emptyResponse(page, 'not-found')
+
+    const allowedSalesOrders = exactSalesOrders.filter((salesOrder) =>
+      isAllowedCustomer(salesOrder.customerName)
+    )
+    if (allowedSalesOrders.length === 0) {
+      return this.emptyResponse(page, 'outside-allowed-customer')
+    }
+
+    const filteredSalesOrders = request.customerName
+      ? allowedSalesOrders.filter((salesOrder) => salesOrder.customerName === request.customerName)
+      : allowedSalesOrders
+
+    return filteredSalesOrders.length > 0
+      ? this.response(
+          {
+            ...page,
+            salesOrders: filteredSalesOrders,
+            totalSalesOrders: filteredSalesOrders.length,
+            hasPrevious: false,
+            hasNext: false
+          },
+          'success'
+        )
+      : this.emptyResponse(page, 'not-found')
+  }
+
+  async searchPurchaseOrder(request: PurchaseOrderSearchRequest): Promise<BacklogResponse> {
+    if (request.refreshDetails) this.dataSource.invalidateDetails?.()
+    const purchaseOrderNumber = normalizePurchaseOrderNumber(request.purchaseOrderNumber)
+    const page = await this.dataSource.getPurchaseOrder(purchaseOrderNumber)
+    const exactSalesOrders = page.salesOrders.filter(
+      (salesOrder) => salesOrder.poNumber.trim().toUpperCase() === purchaseOrderNumber
     )
 
     if (exactSalesOrders.length === 0) return this.emptyResponse(page, 'not-found')

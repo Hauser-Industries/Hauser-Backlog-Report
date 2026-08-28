@@ -4,6 +4,7 @@ import type { SuiteQlOptions } from '../client/suiteQlClient'
 import type { BacklogRepository } from '../repositories/backlogRepository'
 import { ALL_CUSTOMERS_VALUE, isAllowedCustomer } from '@shared/constants/customers'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
+import { normalizePurchaseOrderNumber } from '@shared/utils/purchaseOrder'
 import { NetSuiteIntegrationError } from '../errors'
 
 export interface NetSuiteBacklogDataSourceOptions {
@@ -32,6 +33,14 @@ export class NetSuiteBacklogDataSource implements BacklogDataSource {
     // Preserve outside-allowlist rows long enough for BacklogService to return its
     // distinct outside-allowed-customer outcome.
     return page
+  }
+
+  async getPurchaseOrder(
+    purchaseOrderNumber: string,
+    options?: SuiteQlOptions
+  ): Promise<BacklogPageData> {
+    const normalizedPurchaseOrder = normalizePurchaseOrderNumber(purchaseOrderNumber)
+    return this.backlogRepository.getPurchaseOrder(normalizedPurchaseOrder, options)
   }
 
   async getSalesOrderDetails(): Promise<SalesOrderDetailsResult> {

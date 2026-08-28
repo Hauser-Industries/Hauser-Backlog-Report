@@ -6,6 +6,79 @@ import { VerifiedBacklogQueryFactory } from '../src/main/netsuite/queries/backlo
 import { NetSuiteBacklogRepository } from '../src/main/netsuite/repositories/backlogRepository'
 
 describe('NetSuiteBacklogRepository two-stage paging', () => {
+  it('loads every exact Purchase Order match and reuses the existing line attachment', async () => {
+    const queryAll = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sales_order_internal_id: '10140',
+            sales_order_number: 'SO10140',
+            customer_internal_id: '1432',
+            customer_name: 'LONDON - HAUSER COMPANY STORES',
+            po_number: 'PO-45001',
+            created_date: '2026-08-01'
+          },
+          {
+            sales_order_internal_id: '10141',
+            sales_order_number: 'SO10141',
+            customer_internal_id: '1432',
+            customer_name: 'LONDON - HAUSER COMPANY STORES',
+            po_number: 'PO-45001',
+            created_date: '2026-08-02'
+          }
+        ],
+        totalResults: 2,
+        pages: 1
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sales_order_internal_id: '10140',
+            line_id: '1',
+            line_sequence: '1',
+            item_internal_id: '44',
+            item: 'CHAIR-A',
+            quantity_api_value: '-2'
+          },
+          {
+            sales_order_internal_id: '10141',
+            line_id: '2',
+            line_sequence: '1',
+            item_internal_id: '45',
+            item: 'CHAIR-B',
+            quantity_api_value: '-3'
+          }
+        ],
+        totalResults: 2,
+        pages: 1
+      })
+    const suiteQlClient = {
+      executeSuiteQL: vi.fn(),
+      queryAll
+    } as unknown as SuiteQlClient
+    const repository = new NetSuiteBacklogRepository(
+      suiteQlClient,
+      new VerifiedBacklogQueryFactory(getNetSuiteEnvironmentProfileByEnvironment('production')),
+      { verified: true, orderedSign: 'invert' }
+    )
+
+    const page = await repository.getPurchaseOrder('PO-45001')
+
+    expect(queryAll.mock.calls[0]?.[0]).toMatchObject({
+      name: 'hauser-backlog-exact-purchase-order-header',
+      sql: expect.stringContaining("UPPER(t.otherrefnum) = 'PO-45001'")
+    })
+    expect(queryAll.mock.calls[1]?.[0]).toMatchObject({
+      sql: expect.stringContaining('tl.transaction IN (10140, 10141)')
+    })
+    expect(page.salesOrders.map((salesOrder) => salesOrder.salesOrderNumber)).toEqual([
+      'SO10140',
+      'SO10141'
+    ])
+    expect(page.salesOrders.map((salesOrder) => salesOrder.items[0]?.quantity)).toEqual([2, 3])
+  })
+
   it('pages headers first and then attaches all current-page item lines', async () => {
     const executeSuiteQL = vi.fn(async () => ({
       count: 1,

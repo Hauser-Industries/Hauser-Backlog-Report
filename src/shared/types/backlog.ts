@@ -409,9 +409,50 @@ export interface SalesOrderSearchRequest {
   refreshDetails?: boolean
 }
 
+export interface PurchaseOrderSearchRequest {
+  purchaseOrderNumber: string
+  customerName?: string
+  refreshDetails?: boolean
+}
+
+export type BacklogPrintScope =
+  | { kind: 'customer'; customerName?: string }
+  | { kind: 'sales-order'; salesOrderNumber: string; customerName?: string }
+  | { kind: 'purchase-order'; purchaseOrderNumber: string; customerName?: string }
+
+export interface BacklogPrintRequest {
+  scope: BacklogPrintScope
+}
+
+export interface PrintableBacklogItem extends Omit<BacklogItemRow, 'built'> {
+  built: number | null
+  painted: number | null
+}
+
+export interface PrintableSalesOrderGroup extends Omit<SalesOrderGroup, 'items'> {
+  items: PrintableBacklogItem[]
+}
+
+export interface BacklogPrintSnapshot {
+  salesOrders: PrintableSalesOrderGroup[]
+  scopeLabel: string
+  generatedAt: string
+}
+
+export interface SaveBacklogPdfRequest {
+  suggestedFileName: string
+}
+
+export type SaveBacklogPdfResult =
+  | { saved: true; message: string }
+  | { saved: false; cancelled: true; message: string }
+
 export interface HauserBacklogApi {
   getBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse>
+  searchPurchaseOrder(request: PurchaseOrderSearchRequest): Promise<BacklogResponse>
+  prepareBacklogPrint(request: BacklogPrintRequest): Promise<BacklogPrintSnapshot>
+  saveBacklogPdf(request: SaveBacklogPdfRequest): Promise<SaveBacklogPdfResult>
   refreshBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   getSalesOrderDetails(request: SalesOrderDetailsRequest): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>

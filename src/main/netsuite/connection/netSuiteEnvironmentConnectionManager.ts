@@ -18,6 +18,7 @@ import type { NetSuiteEnvironmentProfile } from '../config/environmentProfiles'
 export interface NetSuiteEnvironmentSession {
   getBacklog(filter: BacklogFilter): Promise<BacklogPageData>
   getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
+  getPurchaseOrder(purchaseOrderNumber: string): Promise<BacklogPageData>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
   getWorkOrderPainted(request: WorkOrderPaintedRequest): Promise<WorkOrderPaintedResult>
@@ -65,6 +66,10 @@ export class NetSuiteEnvironmentConnectionManager {
 
   async getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData> {
     return this.activeSession.getSalesOrder(salesOrderNumber)
+  }
+
+  async getPurchaseOrder(purchaseOrderNumber: string): Promise<BacklogPageData> {
+    return this.activeSession.getPurchaseOrder(purchaseOrderNumber)
   }
 
   async getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult> {

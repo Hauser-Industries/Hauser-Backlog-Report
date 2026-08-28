@@ -1,18 +1,23 @@
-import electron from 'electron'
+import electron, { type WebContents } from 'electron'
 import { z } from 'zod'
 import { isAllowedCustomer } from '@shared/constants/customers'
 import { IPC_CHANNELS } from '@shared/ipc/channels'
 import type {
   BacklogFilter,
+  BacklogPrintRequest,
+  BacklogPrintSnapshot,
   BacklogResponse,
   ConnectionStatus,
   ConnectionTestResult,
   InspectSalesOrderRequest,
   InspectSalesOrderResult,
+  PurchaseOrderSearchRequest,
   ResolveCustomerIdsResult,
   SalesOrderSearchRequest,
   SalesOrderDetailsRequest,
   SalesOrderDetailsResult,
+  SaveBacklogPdfRequest,
+  SaveBacklogPdfResult,
   SuiteQlTestResult,
   SwitchNetSuiteEnvironmentRequest,
   WorkOrderBuiltRequest,
@@ -26,6 +31,7 @@ const { app, ipcMain } = electron
 export interface BacklogController {
   getBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   searchSalesOrder(request: SalesOrderSearchRequest): Promise<BacklogResponse>
+  searchPurchaseOrder(request: PurchaseOrderSearchRequest): Promise<BacklogResponse>
   refreshBacklog(filter: BacklogFilter): Promise<BacklogResponse>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
@@ -43,9 +49,19 @@ export interface ConnectionController {
   switchEnvironment(request: SwitchNetSuiteEnvironmentRequest): Promise<ConnectionStatus>
 }
 
+export interface BacklogPrintController {
+  prepare(request: BacklogPrintRequest): Promise<BacklogPrintSnapshot>
+}
+
+export interface PdfController {
+  save(webContents: WebContents, request: SaveBacklogPdfRequest): Promise<SaveBacklogPdfResult>
+}
+
 interface IpcDependencies {
   backlog: BacklogController
   connection: ConnectionController
+  printData: BacklogPrintController
+  pdf: PdfController
 }
 
 const customerNameSchema = z
@@ -77,6 +93,60 @@ const salesOrderSearchSchema = z
     ...(customerName ? { customerName } : {}),
     ...(refreshDetails !== undefined ? { refreshDetails } : {})
   }))
+
+const purchaseOrderSearchSchema = z
+  .strictObject({
+    purchaseOrderNumber: z.string().trim().min(1).max(80),
+    customerName: customerNameSchema.optional(),
+    refreshDetails: z.boolean().optional()
+  })
+  .transform<PurchaseOrderSearchRequest>(
+    ({ purchaseOrderNumber, customerName, refreshDetails }) => ({
+      purchaseOrderNumber,
+      ...(customerName ? { customerName } : {}),
+      ...(refreshDetails !== undefined ? { refreshDetails } : {})
+    })
+  )
+
+const printScopeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('customer'), customerName: customerNameSchema.optional() }),
+  z.strictObject({
+    kind: z.literal('sales-order'),
+    salesOrderNumber: z.string().trim().min(1).max(40),
+    customerName: customerNameSchema.optional()
+  }),
+  z.strictObject({
+    kind: z.literal('purchase-order'),
+    purchaseOrderNumber: z.string().trim().min(1).max(80),
+    customerName: customerNameSchema.optional()
+  })
+])
+
+const backlogPrintSchema = z
+  .strictObject({ scope: printScopeSchema })
+  .transform<BacklogPrintRequest>(({ scope }) => {
+    const customer = scope.customerName ? { customerName: scope.customerName } : {}
+    switch (scope.kind) {
+      case 'customer':
+        return { scope: { kind: 'customer', ...customer } }
+      case 'sales-order':
+        return {
+          scope: { kind: 'sales-order', salesOrderNumber: scope.salesOrderNumber, ...customer }
+        }
+      case 'purchase-order':
+        return {
+          scope: {
+            kind: 'purchase-order',
+            purchaseOrderNumber: scope.purchaseOrderNumber,
+            ...customer
+          }
+        }
+    }
+  })
+
+const saveBacklogPdfSchema = z
+  .strictObject({ suggestedFileName: z.string().trim().min(1).max(160) })
+  .transform<SaveBacklogPdfRequest>(({ suggestedFileName }) => ({ suggestedFileName }))
 
 const salesOrderDetailsSchema = z
   .strictObject({
@@ -158,12 +228,39 @@ function registerNoArgumentHandler(channel: string, handler: () => Promise<unkno
   })
 }
 
-export function registerIpcHandlers({ backlog, connection }: IpcDependencies): void {
+function registerValidatedSenderHandler<T>(
+  channel: string,
+  schema: z.ZodType<T>,
+  handler: (webContents: WebContents, value: T) => Promise<unknown>
+): void {
+  ipcMain.handle(channel, async (event, rawValue: unknown) => {
+    try {
+      return await handler(event.sender, schema.parse(rawValue))
+    } catch (error) {
+      throw publicError(error)
+    }
+  })
+}
+
+export function registerIpcHandlers({ backlog, connection, printData, pdf }: IpcDependencies): void {
   registerValidatedHandler(IPC_CHANNELS.getBacklog, backlogFilterSchema, (filter) =>
     backlog.getBacklog(filter)
   )
   registerValidatedHandler(IPC_CHANNELS.searchSalesOrder, salesOrderSearchSchema, (request) =>
     backlog.searchSalesOrder(request)
+  )
+  registerValidatedHandler(
+    IPC_CHANNELS.searchPurchaseOrder,
+    purchaseOrderSearchSchema,
+    (request) => backlog.searchPurchaseOrder(request)
+  )
+  registerValidatedHandler(IPC_CHANNELS.prepareBacklogPrint, backlogPrintSchema, (request) =>
+    printData.prepare(request)
+  )
+  registerValidatedSenderHandler(
+    IPC_CHANNELS.saveBacklogPdf,
+    saveBacklogPdfSchema,
+    (webContents, request) => pdf.save(webContents, request)
   )
   registerValidatedHandler(IPC_CHANNELS.refreshBacklog, backlogFilterSchema, (filter) =>
     backlog.refreshBacklog(filter)

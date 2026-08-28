@@ -36,7 +36,9 @@ import {
   type NetSuiteConfigState
 } from './netsuite/config/netsuiteConfig'
 import { BacklogService } from './services/backlogService'
+import { BacklogPrintDataService } from './services/backlogPrintDataService'
 import { ConnectionService } from './services/connectionService'
+import { PdfPrintService } from './services/pdfPrintService'
 import { OAuthDeepLinkRouter } from './services/oauthDeepLinkRouter'
 import { SafeStorageRefreshTokenStore } from './storage/encryptedTokenStore'
 import type { DataSourceMode } from '@shared/types/backlog'
@@ -169,6 +171,10 @@ function createNetSuiteEnvironmentSession(
       assertReportAccessAuthorized()
       return backlogDataSource.getSalesOrder(salesOrderNumber)
     },
+    getPurchaseOrder: (purchaseOrderNumber) => {
+      assertReportAccessAuthorized()
+      return backlogDataSource.getPurchaseOrder(purchaseOrderNumber)
+    },
     getSalesOrderDetails: (salesOrderInternalId) => {
       assertReportAccessAuthorized()
       return salesOrderDetailProvider.getDetails(salesOrderInternalId)
@@ -288,6 +294,8 @@ if (!hasSingleInstanceLock) {
     const backlogService = new BacklogService(
       createBacklogDataSource(mode, configState, liveConnectionAdapter)
     )
+    const printDataService = new BacklogPrintDataService(backlogService)
+    const pdfPrintService = new PdfPrintService()
     const connectionService = new ConnectionService(mode, liveConnectionAdapter, {
       configured: configState.configured,
       ...(configState.configured ? { accountLabel: configState.config.accountId } : {}),
@@ -295,7 +303,12 @@ if (!hasSingleInstanceLock) {
         ? { message: 'Production report access uses the authenticated read-only SuiteQL session.' }
         : {})
     })
-    registerIpcHandlers({ backlog: backlogService, connection: connectionService })
+    registerIpcHandlers({
+      backlog: backlogService,
+      connection: connectionService,
+      printData: printDataService,
+      pdf: pdfPrintService
+    })
 
     log.info('Application services initialized', {
       version: app.getVersion(),

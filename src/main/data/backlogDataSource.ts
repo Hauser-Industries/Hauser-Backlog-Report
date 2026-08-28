@@ -16,6 +16,7 @@ import type {
 export interface BacklogDataSource {
   getBacklog(filter: BacklogFilter): Promise<BacklogPageData>
   getSalesOrder(salesOrderNumber: string): Promise<BacklogPageData>
+  getPurchaseOrder(purchaseOrderNumber: string): Promise<BacklogPageData>
   getSalesOrderDetails(salesOrderInternalId: string): Promise<SalesOrderDetailsResult>
   getWorkOrderBuilt?(request: WorkOrderBuiltRequest): Promise<WorkOrderBuiltResult>
   getWorkOrderPainted?(request: WorkOrderPaintedRequest): Promise<WorkOrderPaintedResult>

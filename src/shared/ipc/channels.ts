@@ -1,6 +1,9 @@
 export const IPC_CHANNELS = {
   getBacklog: 'backlog:get',
   searchSalesOrder: 'backlog:search-sales-order',
+  searchPurchaseOrder: 'backlog:search-purchase-order',
+  prepareBacklogPrint: 'backlog:prepare-print',
+  saveBacklogPdf: 'backlog:save-pdf',
   refreshBacklog: 'backlog:refresh',
   getSalesOrderDetails: 'backlog:sales-order-details',
   getWorkOrderBuilt: 'backlog:work-order-built',

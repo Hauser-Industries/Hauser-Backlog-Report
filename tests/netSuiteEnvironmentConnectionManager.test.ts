@@ -60,6 +60,16 @@ function createSessionFactory(records: SessionRecord[]) {
           hasNext: false
         }
       },
+      async getPurchaseOrder() {
+        return {
+          salesOrders: [],
+          page: 0,
+          pageSize: 50,
+          totalSalesOrders: 0,
+          hasPrevious: false,
+          hasNext: false
+        }
+      },
       async getSalesOrderDetails() {
         return { success: true, items: [] }
       },

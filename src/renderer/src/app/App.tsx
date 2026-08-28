@@ -7,23 +7,28 @@ import {
 import type {
   AppInfo,
   BacklogFilter,
+  BacklogPrintRequest,
+  BacklogPrintSnapshot,
   BacklogResponse,
   ConnectionStatus,
   InspectSalesOrderResult,
   NetSuiteEnvironment,
+  PurchaseOrderSearchRequest,
   ResolveCustomerIdsResult,
   SalesOrderSearchRequest,
   SuiteQlTestResult
 } from '@shared/types/backlog'
 import { formatDateTime } from '@shared/utils/date'
 import { normalizeSalesOrderNumber } from '@shared/utils/salesOrder'
+import { normalizePurchaseOrderNumber } from '@shared/utils/purchaseOrder'
 import {
   requiresStartupAuthorization,
   shouldBeginStartupAuthorization,
   shouldLoadBacklogAtStartup
 } from '@shared/utils/startupMode'
-import { AlertIcon, RefreshIcon, SearchIcon, SlidersIcon } from '../components/icons'
+import { AlertIcon, PrintIcon, RefreshIcon, SearchIcon, SlidersIcon } from '../components/icons'
 import { BacklogTable } from '../features/backlog/BacklogTable'
+import { PrintableBacklogReport } from '../features/backlog/PrintableBacklogReport'
 import { AuthenticationStage } from '../features/connection/AuthenticationStage'
 import { ConnectionPanel } from '../features/connection/ConnectionPanel'
 
@@ -37,6 +42,7 @@ type LoadingAction =
   | 'customer-resolution'
   | 'sales-order-inspection'
   | 'environment'
+  | 'print'
   | null
 
 const INITIAL_CONNECTION: ConnectionStatus = {
@@ -61,6 +67,25 @@ function searchRequest(
   return selectedCustomer === ALL_CUSTOMERS_VALUE
     ? { salesOrderNumber }
     : { salesOrderNumber, customerName: selectedCustomer }
+}
+
+function purchaseOrderSearchRequest(
+  purchaseOrderNumber: string,
+  selectedCustomer: string
+): PurchaseOrderSearchRequest {
+  return selectedCustomer === ALL_CUSTOMERS_VALUE
+    ? { purchaseOrderNumber }
+    : { purchaseOrderNumber, customerName: selectedCustomer }
+}
+
+function selectedCustomerName(selectedCustomer: string): string | undefined {
+  return selectedCustomer === ALL_CUSTOMERS_VALUE ? undefined : selectedCustomer
+}
+
+function waitForPrintableLayout(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
 }
 
 function connectionLabel(status: ConnectionStatus): string {
@@ -116,6 +141,8 @@ export function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<string>(ALL_CUSTOMERS_VALUE)
   const [salesOrderInput, setSalesOrderInput] = useState('')
   const [activeSalesOrder, setActiveSalesOrder] = useState<string | null>(null)
+  const [purchaseOrderInput, setPurchaseOrderInput] = useState('')
+  const [activePurchaseOrder, setActivePurchaseOrder] = useState<string | null>(null)
   const [response, setResponse] = useState<BacklogResponse | null>(null)
   const [connection, setConnection] = useState<ConnectionStatus>(INITIAL_CONNECTION)
   const [suiteQlResult, setSuiteQlResult] = useState<SuiteQlTestResult | null>(null)
@@ -132,6 +159,9 @@ export function App() {
   const [loadingAction, setLoadingAction] = useState<LoadingAction>('initial')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [searchValidation, setSearchValidation] = useState<string | null>(null)
+  const [purchaseOrderValidation, setPurchaseOrderValidation] = useState<string | null>(null)
+  const [printSnapshot, setPrintSnapshot] = useState<BacklogPrintSnapshot | null>(null)
+  const [printMessage, setPrintMessage] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const requestSequence = useRef(0)
   const initialLoadStarted = useRef(false)
@@ -220,13 +250,22 @@ export function App() {
     requestSequence.current += 1
     setSelectedCustomer(value)
     setActiveSalesOrder(null)
+    setActivePurchaseOrder(null)
     setSalesOrderInput('')
+    setPurchaseOrderInput('')
     setSearchValidation(null)
+    setPurchaseOrderValidation(null)
+    setPrintMessage(null)
     setResponse(null)
   }
 
   useEffect(() => {
-    if (!initialLoadStarted.current || activeSalesOrder !== null || loadingAction === 'initial')
+    if (
+      !initialLoadStarted.current ||
+      activeSalesOrder !== null ||
+      activePurchaseOrder !== null ||
+      loadingAction === 'initial'
+    )
       return
     void loadBacklog('filter')
     // selectedCustomer is intentionally the trigger; loadBacklog carries the current value.
@@ -247,16 +286,54 @@ export function App() {
 
     setSalesOrderInput(normalized)
     setActiveSalesOrder(normalized)
+    setPurchaseOrderInput('')
+    setActivePurchaseOrder(null)
+    setPurchaseOrderValidation(null)
+    setPrintMessage(null)
     void runReportRequest('search', () =>
       window.hauserBacklog.searchSalesOrder(searchRequest(normalized, selectedCustomer))
     )
   }
 
-  const handleClearSearch = () => {
+  const handleClearSalesOrderSearch = () => {
+    const wasActive = activeSalesOrder !== null
     setSalesOrderInput('')
     setActiveSalesOrder(null)
     setSearchValidation(null)
-    void loadBacklog('filter', 0)
+    if (wasActive) void loadBacklog('filter', 0)
+  }
+
+  const handlePurchaseOrderSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setPurchaseOrderValidation(null)
+
+    let normalized: string
+    try {
+      normalized = normalizePurchaseOrderNumber(purchaseOrderInput)
+    } catch (error) {
+      setPurchaseOrderValidation(friendlyError(error))
+      return
+    }
+
+    setPurchaseOrderInput(normalized)
+    setActivePurchaseOrder(normalized)
+    setSalesOrderInput('')
+    setActiveSalesOrder(null)
+    setSearchValidation(null)
+    setPrintMessage(null)
+    void runReportRequest('search', () =>
+      window.hauserBacklog.searchPurchaseOrder(
+        purchaseOrderSearchRequest(normalized, selectedCustomer)
+      )
+    )
+  }
+
+  const handleClearPurchaseOrderSearch = () => {
+    const wasActive = activePurchaseOrder !== null
+    setPurchaseOrderInput('')
+    setActivePurchaseOrder(null)
+    setPurchaseOrderValidation(null)
+    if (wasActive) void loadBacklog('filter', 0)
   }
 
   const handleRefresh = () => {
@@ -269,7 +346,49 @@ export function App() {
       )
       return
     }
+    if (activePurchaseOrder) {
+      void runReportRequest('refresh', () =>
+        window.hauserBacklog.searchPurchaseOrder({
+          ...purchaseOrderSearchRequest(activePurchaseOrder, selectedCustomer),
+          refreshDetails: true
+        })
+      )
+      return
+    }
     void loadBacklog('refresh', response?.page ?? 0)
+  }
+
+  const handlePrintPdf = async () => {
+    const customerName = selectedCustomerName(selectedCustomer)
+    const request: BacklogPrintRequest = {
+      scope: { kind: 'customer', ...(customerName ? { customerName } : {}) }
+    }
+
+    setLoadingAction('print')
+    setErrorMessage(null)
+    setPrintMessage('Preparing all expanded report rows for PDF...')
+    setPrintSnapshot(null)
+    try {
+      const snapshot = await window.hauserBacklog.prepareBacklogPrint(request)
+      if (snapshot.salesOrders.length === 0) {
+        setPrintMessage('There are no report records to print for the current selection.')
+        return
+      }
+      setPrintSnapshot(snapshot)
+      await waitForPrintableLayout()
+      await document.fonts.ready
+      const date = new Date().toISOString().slice(0, 10)
+      const result = await window.hauserBacklog.saveBacklogPdf({
+        suggestedFileName: `Hauser Backlog Report - ${snapshot.scopeLabel} - ${date}.pdf`
+      })
+      setPrintMessage(result.message)
+    } catch (error) {
+      setPrintMessage(null)
+      setErrorMessage(friendlyError(error))
+    } finally {
+      setPrintSnapshot(null)
+      setLoadingAction(null)
+    }
   }
 
   const runConnectionAction = async (action: () => Promise<ConnectionStatus>) => {
@@ -376,6 +495,12 @@ export function App() {
     setSalesOrderInspectionValidation(null)
     setResponse(null)
     setActiveSalesOrder(null)
+    setActivePurchaseOrder(null)
+    setSalesOrderInput('')
+    setPurchaseOrderInput('')
+    setSearchValidation(null)
+    setPurchaseOrderValidation(null)
+    setPrintMessage(null)
     try {
       setConnection(await window.hauserBacklog.switchEnvironment({ environment }))
     } catch (error) {
@@ -387,7 +512,9 @@ export function App() {
 
   const outcomeMessage =
     response?.outcome === 'not-found'
-      ? 'No matching sales order was found.'
+      ? activePurchaseOrder
+        ? 'No matching purchase order was found.'
+        : 'No matching sales order was found.'
       : response?.outcome === 'outside-allowed-customer'
         ? 'This sales order is not associated with one of the configured Hauser Company Stores customers.'
         : null
@@ -403,7 +530,10 @@ export function App() {
     loadingAction !== 'suiteql' &&
     loadingAction !== 'customer-resolution' &&
     loadingAction !== 'sales-order-inspection' &&
-    loadingAction !== 'environment'
+    loadingAction !== 'environment' &&
+    loadingAction !== 'print'
+  const printBusy = loadingAction === 'print'
+  const toolbarBusy = reportBusy || printBusy
   const startupGateActive = requiresStartupAuthorization(connection)
 
   return (
@@ -505,7 +635,7 @@ export function App() {
                 </select>
               </label>
 
-              <form className="sales-order-search" onSubmit={handleSearch} noValidate>
+              <form className="order-search sales-order-search" onSubmit={handleSearch} noValidate>
                 <label className="field">
                   <span>Sales Order</span>
                   <div
@@ -520,51 +650,124 @@ export function App() {
                       value={salesOrderInput}
                       onChange={(event) => {
                         setSalesOrderInput(event.target.value)
+                        setPurchaseOrderInput('')
                         setSearchValidation(null)
+                        setPurchaseOrderValidation(null)
                       }}
-                      placeholder="Enter 1234 or SO1234"
+                      placeholder="1234 or SO1234"
                       aria-invalid={Boolean(searchValidation)}
                       aria-describedby={searchValidation ? 'sales-order-error' : undefined}
                     />
                   </div>
                 </label>
-                <button className="button button--primary" type="submit" disabled={reportBusy}>
+                <button className="button button--primary" type="submit" disabled={toolbarBusy}>
                   Search
                 </button>
                 <button
                   className="button button--ghost"
                   type="button"
-                  onClick={handleClearSearch}
-                  disabled={reportBusy || (!activeSalesOrder && !salesOrderInput)}
+                  onClick={handleClearSalesOrderSearch}
+                  disabled={toolbarBusy || (!activeSalesOrder && !salesOrderInput)}
                 >
                   Clear
                 </button>
+                {searchValidation ? (
+                  <p className="field-error field-error--inline" id="sales-order-error">
+                    {searchValidation}
+                  </p>
+                ) : null}
+              </form>
+
+              <form
+                className="order-search purchase-order-search"
+                onSubmit={handlePurchaseOrderSearch}
+                noValidate
+              >
+                <label className="field">
+                  <span>Purchase Order</span>
+                  <div
+                    className={
+                      purchaseOrderValidation
+                        ? 'input-with-icon input-with-icon--error'
+                        : 'input-with-icon'
+                    }
+                  >
+                    <SearchIcon />
+                    <input
+                      value={purchaseOrderInput}
+                      onChange={(event) => {
+                        setPurchaseOrderInput(event.target.value)
+                        setSalesOrderInput('')
+                        setPurchaseOrderValidation(null)
+                        setSearchValidation(null)
+                      }}
+                      placeholder="Enter PO #"
+                      aria-invalid={Boolean(purchaseOrderValidation)}
+                      aria-describedby={
+                        purchaseOrderValidation ? 'purchase-order-error' : undefined
+                      }
+                    />
+                  </div>
+                </label>
+                <button className="button button--primary" type="submit" disabled={toolbarBusy}>
+                  Search
+                </button>
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={handleClearPurchaseOrderSearch}
+                  disabled={toolbarBusy || (!activePurchaseOrder && !purchaseOrderInput)}
+                >
+                  Clear
+                </button>
+                {purchaseOrderValidation ? (
+                  <p className="field-error field-error--inline" id="purchase-order-error">
+                    {purchaseOrderValidation}
+                  </p>
+                ) : null}
               </form>
 
               <div className="refresh-area">
                 <p>
                   Last updated <strong>{formatDateTime(response?.lastUpdated)}</strong>
                 </p>
+                <div className="refresh-area__actions">
                 <button
                   className="button button--secondary"
                   type="button"
                   onClick={handleRefresh}
-                  disabled={reportBusy}
+                  disabled={toolbarBusy}
                 >
                   <RefreshIcon className={loadingAction === 'refresh' ? 'spin' : undefined} />
                   {loadingAction === 'refresh' ? 'Refreshing…' : 'Refresh'}
                 </button>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => void handlePrintPdf()}
+                    disabled={toolbarBusy || !response || response.salesOrders.length === 0}
+                    title="Save all expanded rows for the selected customer as a PDF"
+                  >
+                    <PrintIcon />
+                    {printBusy ? 'Preparing PDF...' : 'Print PDF'}
+                  </button>
+                </div>
               </div>
-              {searchValidation ? (
-                <p className="field-error" id="sales-order-error">
-                  {searchValidation}
-                </p>
-              ) : null}
             </section>
 
             {activeSalesOrder ? (
               <div className="active-query">
                 Showing an exact Sales Order search for <strong>{activeSalesOrder}</strong>
+              </div>
+            ) : activePurchaseOrder ? (
+              <div className="active-query">
+                Showing an exact Purchase Order search for <strong>{activePurchaseOrder}</strong>
+              </div>
+            ) : null}
+
+            {printMessage ? (
+              <div className="print-message" role="status" aria-live="polite">
+                {printMessage}
               </div>
             ) : null}
 
@@ -599,7 +802,11 @@ export function App() {
                   <span className="loading-spinner" aria-hidden="true" />
                   <div>
                     <strong>
-                      {loadingAction === 'search' ? 'Searching Sales Orders…' : 'Loading backlog…'}
+                      {loadingAction === 'search'
+                        ? activePurchaseOrder
+                          ? 'Searching Purchase Orders...'
+                          : 'Searching Sales Orders...'
+                        : 'Loading backlog...'}
                     </strong>
                     <span>Retrieving Sales Order headers and basic item lines.</span>
                   </div>
@@ -646,6 +853,8 @@ export function App() {
         {appInfo ? <span>Version {appInfo.version}</span> : null}
         <span className="status-footer__readonly">Read-only report</span>
       </footer>
+
+      {printSnapshot ? <PrintableBacklogReport snapshot={printSnapshot} /> : null}
 
       {settingsOpen ? (
         <>

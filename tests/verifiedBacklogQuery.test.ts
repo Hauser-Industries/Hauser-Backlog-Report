@@ -47,6 +47,16 @@ describe('VerifiedBacklogQueryFactory demo-ready live query', () => {
     expect(query.sql).toContain("UPPER(t.tranid) = 'SO10144'")
   })
 
+  it('creates a safe exact Purchase Order header query without changing report boundaries', () => {
+    const query = factory.createExactPurchaseOrderHeaderQuery(" po'45001 ")
+
+    expect(query.name).toBe('hauser-backlog-exact-purchase-order-header')
+    expect(query.sql).toContain("UPPER(t.otherrefnum) = 'PO''45001'")
+    expect(query.sql).toContain('t.entity IN (1432, 1446, 1578, 5602, 5625, 6344)')
+    expect(query.sql).toContain(excludedSalesOrderStatusFilter)
+    expect(query.sql).toContain('ORDER BY t.createddate ASC, t.id ASC')
+  })
+
   it('creates a separate line query for validated current-page Sales Order IDs', () => {
     const query = factory.createSalesOrderLineQuery(['10144', '10145'])
 

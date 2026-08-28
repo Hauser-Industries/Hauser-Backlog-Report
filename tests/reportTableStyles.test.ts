@@ -19,4 +19,16 @@ describe('report table scrolling', () => {
     expect(css).toMatch(/\.app-shell\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s)
     expect(css).toMatch(/\.report-section\s*\{[^}]*max-width:\s*100%;/s)
   })
+
+  it('defines a readable, wrapped, expanded Letter-landscape PDF layout', () => {
+    const css = readFileSync(resolve('src/renderer/src/styles/global.css'), 'utf8')
+
+    expect(css).toMatch(/@page\s*\{[^}]*size:\s*Letter landscape;/s)
+    expect(css).toMatch(/\.print-report\s*\{[^}]*font-size:\s*7\.5pt;/s)
+    expect(css).toMatch(/\.print-report__table thead\s*\{[^}]*table-header-group;/s)
+    expect(css).toMatch(/\.print-report__table th,[\s\S]*?overflow-wrap:\s*anywhere;/s)
+    expect(css).toMatch(/\.print-report__table th,[\s\S]*?white-space:\s*normal;/s)
+    expect(css).toMatch(/\.print-report\s*\{[^}]*display:\s*none;/s)
+    expect(css).toMatch(/@media print[\s\S]*?\.print-report\s*\{[^}]*display:\s*block !important;/s)
+  })
 })

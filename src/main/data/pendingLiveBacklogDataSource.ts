@@ -24,6 +24,10 @@ export class PendingLiveBacklogDataSource implements BacklogDataSource {
     return this.assertReady()
   }
 
+  async getPurchaseOrder(): Promise<BacklogPageData> {
+    return this.assertReady()
+  }
+
   async getSalesOrderDetails(): Promise<SalesOrderDetailsResult> {
     return this.assertReady()
   }

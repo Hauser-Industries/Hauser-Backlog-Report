@@ -44,6 +44,14 @@ export class MockBacklogDataSource implements BacklogDataSource {
     return pageSalesOrderGroups(salesOrders, 0, 1)
   }
 
+  async getPurchaseOrder(purchaseOrderNumber: string): Promise<BacklogPageData> {
+    const normalized = purchaseOrderNumber.trim().toUpperCase()
+    const salesOrders = groupBacklogRows(
+      cloneRows(this.sourceRows.filter((row) => row.poNumber.toUpperCase() === normalized))
+    )
+    return pageSalesOrderGroups(salesOrders, 0, Math.max(1, salesOrders.length))
+  }
+
   async getSalesOrderDetails(): Promise<SalesOrderDetailsResult> {
     return { success: true, items: [] }
   }

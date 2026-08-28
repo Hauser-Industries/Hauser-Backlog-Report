@@ -16,6 +16,7 @@ import { netSuiteDiagnosticLogger } from '../diagnostics/sanitizedLogger'
 export interface BacklogRepository {
   getBacklog(filter: BacklogFilter, options?: SuiteQlOptions): Promise<BacklogPageData>
   getSalesOrder(salesOrderNumber: string, options?: SuiteQlOptions): Promise<BacklogPageData>
+  getPurchaseOrder(purchaseOrderNumber: string, options?: SuiteQlOptions): Promise<BacklogPageData>
 }
 
 export class NetSuiteBacklogRepository implements BacklogRepository {
@@ -86,6 +87,28 @@ export class NetSuiteBacklogRepository implements BacklogRepository {
       salesOrders,
       page: 0,
       pageSize: 1,
+      totalSalesOrders: salesOrders.length,
+      hasPrevious: false,
+      hasNext: false
+    }
+  }
+
+  async getPurchaseOrder(
+    purchaseOrderNumber: string,
+    options?: SuiteQlOptions
+  ): Promise<BacklogPageData> {
+    const headerResult = await this.suiteQlClient.queryAll(
+      this.queryFactory.createExactPurchaseOrderHeaderQuery(purchaseOrderNumber),
+      options
+    )
+    const salesOrders = headerResult.items.map(transformSalesOrderHeader)
+    await this.attachItemLines(salesOrders, options)
+    await this.attachWorkOrders(salesOrders)
+
+    return {
+      salesOrders,
+      page: 0,
+      pageSize: Math.max(1, salesOrders.length),
       totalSalesOrders: salesOrders.length,
       hasPrevious: false,
       hasNext: false

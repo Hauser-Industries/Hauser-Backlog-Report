@@ -4,12 +4,15 @@ import type { SuiteQlQuery } from '../types/netsuiteTypes'
 import { UnverifiedFieldMappingError } from '../errors'
 import type { NetSuiteEnvironmentProfile } from '../config/environmentProfiles'
 import { InvalidSalesOrderNumberError } from '@shared/utils/salesOrder'
+import { normalizePurchaseOrderNumber } from '@shared/utils/purchaseOrder'
+import { quoteSuiteQlString } from './querySafety'
 
 export interface BacklogQueryFactory {
   createBacklogQuery(filter: BacklogFilter): SuiteQlQuery
   createSalesOrderQuery(salesOrderNumber: string): SuiteQlQuery
   createSalesOrderHeaderQuery(filter: BacklogFilter): SuiteQlQuery
   createExactSalesOrderHeaderQuery(salesOrderNumber: string): SuiteQlQuery
+  createExactPurchaseOrderHeaderQuery(purchaseOrderNumber: string): SuiteQlQuery
   createSalesOrderLineQuery(salesOrderInternalIds: readonly string[]): SuiteQlQuery
 }
 
@@ -133,6 +136,16 @@ export class VerifiedBacklogQueryFactory implements BacklogQueryFactory {
     }
   }
 
+  createExactPurchaseOrderHeaderQuery(purchaseOrderNumber: string): SuiteQlQuery {
+    const normalizedPurchaseOrder = normalizePurchaseOrderNumber(purchaseOrderNumber)
+    return {
+      name: 'hauser-backlog-exact-purchase-order-header',
+      sql: salesOrderHeaderQuery(
+        `t.entity IN (${this.allCustomerIds}) AND UPPER(t.otherrefnum) = ${quoteSuiteQlString(normalizedPurchaseOrder)}`
+      )
+    }
+  }
+
   createSalesOrderLineQuery(salesOrderInternalIds: readonly string[]): SuiteQlQuery {
     return {
       name: 'hauser-backlog-sales-order-lines',
@@ -167,6 +180,10 @@ export class PendingBacklogQueryFactory implements BacklogQueryFactory {
 
   createExactSalesOrderHeaderQuery(): SuiteQlQuery {
     return this.createSalesOrderQuery()
+  }
+
+  createExactPurchaseOrderHeaderQuery(): SuiteQlQuery {
+    throw new UnverifiedFieldMappingError(['exact Purchase Order query'])
   }
 
   createSalesOrderLineQuery(): SuiteQlQuery {

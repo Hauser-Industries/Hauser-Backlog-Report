@@ -13,6 +13,7 @@ describe('BacklogService', () => {
     const dataSource: BacklogDataSource = {
       getBacklog: vi.fn(async () => makeBacklogPage([])),
       getSalesOrder,
+      getPurchaseOrder: vi.fn(async () => makeBacklogPage([])),
       getSalesOrderDetails: noDetails
     }
     const service = new BacklogService(dataSource)
@@ -27,6 +28,27 @@ describe('BacklogService', () => {
   it('returns a friendly not-found outcome for a missing sales order', async () => {
     const service = new BacklogService(new MockBacklogDataSource())
     const response = await service.searchSalesOrder({ salesOrderNumber: '777777' })
+
+    expect(response).toMatchObject({ outcome: 'not-found', salesOrders: [] })
+  })
+
+  it('normalizes and returns an exact Purchase Order through its separate search path', async () => {
+    const service = new BacklogService(new MockBacklogDataSource())
+
+    const response = await service.searchPurchaseOrder({ purchaseOrderNumber: ' po-45001 ' })
+
+    expect(response.outcome).toBe('success')
+    expect(response.salesOrders).toHaveLength(1)
+    expect(response.salesOrders[0]?.poNumber).toBe('PO-45001')
+  })
+
+  it('applies the selected customer to a Purchase Order search', async () => {
+    const service = new BacklogService(new MockBacklogDataSource())
+
+    const response = await service.searchPurchaseOrder({
+      purchaseOrderNumber: 'PO-45001',
+      customerName: 'OTTAWA - HAUSER COMPANY STORES'
+    })
 
     expect(response).toMatchObject({ outcome: 'not-found', salesOrders: [] })
   })
@@ -63,6 +85,7 @@ describe('BacklogService', () => {
         ])
       ),
       getSalesOrder: vi.fn(async () => makeBacklogPage([])),
+      getPurchaseOrder: vi.fn(async () => makeBacklogPage([])),
       getSalesOrderDetails: noDetails
     }
     const service = new BacklogService(dataSource)
@@ -77,6 +100,7 @@ describe('BacklogService', () => {
     const dataSource: BacklogDataSource = {
       getBacklog,
       getSalesOrder: vi.fn(async () => makeBacklogPage([])),
+      getPurchaseOrder: vi.fn(async () => makeBacklogPage([])),
       getSalesOrderDetails: noDetails
     }
     const service = new BacklogService(dataSource)

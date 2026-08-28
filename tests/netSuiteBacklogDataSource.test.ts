@@ -5,6 +5,20 @@ import type { BacklogRepository } from '../src/main/netsuite/repositories/backlo
 import { makeBacklogPage, makeSalesOrderGroup } from './helpers/testData'
 
 describe('NetSuiteBacklogDataSource grouped Sales Order flow', () => {
+  it('normalizes a Purchase Order before calling the exact repository path', async () => {
+    const getPurchaseOrder = vi.fn(async () => makeBacklogPage([]))
+    const repository: BacklogRepository = {
+      getBacklog: vi.fn(async () => makeBacklogPage([])),
+      getSalesOrder: vi.fn(async () => makeBacklogPage([])),
+      getPurchaseOrder
+    }
+    const source = new NetSuiteBacklogDataSource({ backlogRepository: repository })
+
+    await source.getPurchaseOrder(' po-45001 ')
+
+    expect(getPurchaseOrder).toHaveBeenCalledWith('PO-45001', undefined)
+  })
+
   it('returns repository Sales Order groups without child Work Order traversal', async () => {
     const getBacklog = vi.fn(async () =>
       makeBacklogPage([
@@ -25,7 +39,8 @@ describe('NetSuiteBacklogDataSource grouped Sales Order flow', () => {
     )
     const repository: BacklogRepository = {
       getBacklog,
-      getSalesOrder: vi.fn(async () => makeBacklogPage([]))
+      getSalesOrder: vi.fn(async () => makeBacklogPage([])),
+      getPurchaseOrder: vi.fn(async () => makeBacklogPage([]))
     }
     const source = new NetSuiteBacklogDataSource({
       backlogRepository: repository

@@ -114,7 +114,7 @@ p {
 
 .brand,
 .header-actions,
-.sales-order-search,
+.order-search,
 .refresh-area,
 .hierarchy-panel__summary,
 .hierarchy-panel__heading,
@@ -238,8 +238,10 @@ main {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(320px, 1fr) minmax(485px, 1.45fr) auto;
-  gap: 20px;
+  grid-template-columns:
+    minmax(260px, 1.1fr) minmax(285px, 0.9fr) minmax(285px, 0.9fr)
+    minmax(300px, auto);
+  gap: 14px;
   align-items: end;
   padding: 18px 20px;
   background: rgb(255 255 255 / 94%);
@@ -293,12 +295,19 @@ main {
   padding: 0 34px 0 11px;
 }
 
-.sales-order-search {
-  gap: 8px;
+.order-search {
+  position: relative;
+  gap: 6px;
+  min-width: 0;
 }
 
-.sales-order-search .field {
+.order-search .field {
   flex: 1;
+}
+
+.order-search .button {
+  padding-right: 10px;
+  padding-left: 10px;
 }
 
 .input-with-icon {
@@ -375,9 +384,14 @@ main {
 }
 
 .refresh-area {
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
-  min-width: 270px;
+  min-width: 300px;
+}
+
+.refresh-area__actions {
+  display: flex;
+  gap: 7px;
 }
 
 .refresh-area p {
@@ -401,6 +415,15 @@ main {
   font-size: 11px;
 }
 
+.field-error--inline {
+  right: 0;
+  bottom: -17px;
+  left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .active-query {
   display: inline-flex;
   gap: 4px;
@@ -411,6 +434,21 @@ main {
   background: #e1eeeb;
   border: 1px solid #c4ddd7;
   border-radius: 4px;
+}
+
+.print-message {
+  display: inline-flex;
+  margin: 12px 0 0 8px;
+  padding: 7px 10px;
+  color: #3a5c55;
+  font-size: 12px;
+  background: #f4f8f7;
+  border: 1px solid #cbded9;
+  border-radius: 4px;
+}
+
+.print-report {
+  display: none;
 }
 
 .report-section {
@@ -1771,12 +1809,161 @@ main {
 
 @media (max-width: 1180px) {
   .report-toolbar {
-    grid-template-columns: minmax(290px, 0.8fr) minmax(470px, 1.2fr);
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
   }
 
   .refresh-area {
     grid-column: 1 / -1;
     justify-content: flex-end;
+  }
+}
+
+@media print {
+  @page {
+    size: Letter landscape;
+    margin: 0.28in;
+  }
+
+  html,
+  body,
+  #root {
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    color: #111;
+    background: #fff;
+  }
+
+  .app-shell {
+    display: block;
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .app-shell > *:not(.print-report) {
+    display: none !important;
+  }
+
+  .print-report {
+    display: block !important;
+    width: 100%;
+    color: #111;
+    font-family: Arial, 'Segoe UI', sans-serif;
+    font-size: 7.5pt;
+    line-height: 1.2;
+    print-color-adjust: exact;
+  }
+
+  .print-report__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12pt;
+    margin-bottom: 7pt;
+    padding-bottom: 5pt;
+    border-bottom: 1.25pt solid #315e55;
+  }
+
+  .print-report__header h1 {
+    font-size: 15pt;
+    line-height: 1.1;
+  }
+
+  .print-report__header p,
+  .print-report__header span {
+    display: block;
+    margin-top: 2pt;
+    font-size: 7.5pt;
+  }
+
+  .print-report__header > div:last-child {
+    text-align: right;
+  }
+
+  .print-report__table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 7.25pt;
+    border-collapse: collapse;
+  }
+
+  .print-report__table thead {
+    display: table-header-group;
+  }
+
+  .print-report__table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-report__table th,
+  .print-report__table td {
+    height: auto;
+    padding: 2.25pt 2pt;
+    overflow: visible;
+    line-height: 1.18;
+    text-align: left;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    border: 0.5pt solid #cfd7d5;
+  }
+
+  .print-report__table th {
+    color: #fff;
+    font-size: 6.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #315e55;
+  }
+
+  .print-sales-order-row {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-sales-order-row td {
+    color: #183f37;
+    font-weight: 700;
+    background: #eaf3f1;
+  }
+
+  .print-item-row:nth-child(even) td {
+    background: #f8f9f9;
+  }
+
+  .print-numeric {
+    font-variant-numeric: tabular-nums;
+    text-align: right !important;
+  }
+
+  .print-report .built-value {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    padding: 1.5pt 2pt;
+    text-align: right;
+    border-radius: 3pt;
+  }
+
+  .print-report .status-badge {
+    display: inline-block;
+    max-width: 100%;
+    padding: 1.5pt 2pt;
+    overflow: visible;
+    font-size: 6.5pt;
+    line-height: 1.15;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    border-radius: 3pt;
+  }
+
+  .print-report .status-badge__dot {
+    display: none;
   }
 }
 
